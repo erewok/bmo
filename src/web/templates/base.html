@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>bmo</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --critical: #f85149;
+      --high: #d29922;
+      --medium: #58a6ff;
+      --review-color: #bc8cff;
+      --done-color: #3fb950;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #ffffff;
+        --surface: #f6f8fa;
+        --border: #d0d7de;
+        --text: #1f2328;
+        --text-muted: #57606a;
+        --accent: #0969da;
+        --critical: #cf222e;
+        --high: #9a6700;
+        --medium: #0969da;
+        --review-color: #8250df;
+        --done-color: #1a7f37;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    nav {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    nav a {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    nav a:first-child {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    nav a:hover { text-decoration: underline; }
+    main {
+      flex: 1;
+      padding: 20px;
+    }
+    /* Board layout */
+    .board {
+      display: flex;
+      gap: 12px;
+      overflow-x: auto;
+      align-items: flex-start;
+    }
+    .column {
+      min-width: 240px;
+      max-width: 280px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .column-header {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 6px 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .count {
+      margin-left: auto;
+      background: var(--border);
+      color: var(--text-muted);
+      font-size: 11px;
+      padding: 1px 6px;
+      border-radius: 10px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+    }
+    .card:hover { border-color: #58a6ff55; }
+    .card-id { font-size: 11px; color: var(--text-muted); font-family: monospace; }
+    .card-title { font-size: 13px; margin: 4px 0; line-height: 1.4; }
+    .card-title a { color: var(--text); text-decoration: none; }
+    .card-title a:hover { color: var(--accent); }
+    .card-meta { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+    .empty { color: var(--text-muted); font-size: 12px; text-align: center; padding: 16px 0; }
+    /* Badges */
+    .badge { font-size: 10px; padding: 1px 6px; border-radius: 10px; font-weight: 500; }
+    .priority-critical { background: #f8514922; color: var(--critical); }
+    .priority-high     { background: #d2992222; color: var(--high); }
+    .priority-medium   { background: #58a6ff22; color: var(--medium); }
+    .priority-low      { background: #8b949e22; color: var(--text-muted); }
+    .priority-none     { background: #8b949e11; color: var(--text-muted); }
+    .kind-bug     { background: #f8514922; color: var(--critical); }
+    .kind-feature { background: #3fb95022; color: var(--done-color); }
+    .kind-task    { background: #58a6ff22; color: var(--medium); }
+    .kind-epic    { background: #bc8cff22; color: var(--review-color); }
+    .kind-chore   { background: #d2992222; color: var(--high); }
+    /* Issue list */
+    h1 { font-size: 20px; font-weight: 600; margin-bottom: 16px; }
+    h2 { font-size: 16px; font-weight: 600; margin: 20px 0 10px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+    th { font-weight: 600; color: var(--text-muted); font-size: 11px; text-transform: uppercase; }
+    tr:hover td { background: var(--surface); }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    /* Issue detail */
+    .issue-detail { max-width: 800px; }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+    .description {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px;
+      font-family: inherit;
+      font-size: 13px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      margin: 16px 0;
+    }
+    .comment {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin-bottom: 8px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/board">bmo board</a>
+    <a href="/issues">Issues</a>
+  </nav>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

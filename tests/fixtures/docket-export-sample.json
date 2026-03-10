@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "exported_at": "2026-01-15T10:00:00Z",
+  "issues": [
+    {
+      "id": "DKT-1",
+      "title": "Project Alpha",
+      "description": "Top-level epic for Project Alpha",
+      "status": "backlog",
+      "priority": "high",
+      "kind": "epic",
+      "assignee": "",
+      "labels": [],
+      "files": [],
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z"
+    },
+    {
+      "id": "DKT-2",
+      "parent_id": "DKT-1",
+      "title": "Set up database",
+      "description": "Initialize the schema and run initial migrations",
+      "status": "done",
+      "priority": "critical",
+      "kind": "task",
+      "assignee": "alice",
+      "labels": [],
+      "files": [],
+      "created_at": "2026-01-02T00:00:00Z",
+      "updated_at": "2026-01-10T00:00:00Z"
+    },
+    {
+      "id": "DKT-3",
+      "parent_id": "DKT-1",
+      "title": "Build API endpoints",
+      "description": "Implement the REST API layer for the application",
+      "status": "in-progress",
+      "priority": "high",
+      "kind": "feature",
+      "assignee": "bob",
+      "labels": [],
+      "files": [],
+      "created_at": "2026-01-03T00:00:00Z",
+      "updated_at": "2026-01-12T00:00:00Z"
+    },
+    {
+      "id": "DKT-4",
+      "parent_id": "DKT-1",
+      "title": "Write integration tests",
+      "description": "Test the full stack end-to-end",
+      "status": "backlog",
+      "priority": "medium",
+      "kind": "task",
+      "assignee": "",
+      "labels": [],
+      "files": [],
+      "created_at": "2026-01-04T00:00:00Z",
+      "updated_at": "2026-01-04T00:00:00Z"
+    }
+  ],
+  "comments": [
+    {
+      "id": 1,
+      "issue_id": "DKT-2",
+      "body": "Schema finalized and migrated successfully",
+      "author": "alice",
+      "created_at": "2026-01-10T00:00:00Z"
+    },
+    {
+      "id": 2,
+      "issue_id": "DKT-3",
+      "body": "Auth endpoints done, working on data routes",
+      "author": "bob",
+      "created_at": "2026-01-12T00:00:00Z"
+    }
+  ],
+  "relations": [
+    {
+      "id": 1,
+      "source_issue_id": "DKT-2",
+      "target_issue_id": "DKT-3",
+      "relation_type": "blocks",
+      "created_at": "2026-01-05T00:00:00Z"
+    },
+    {
+      "id": 2,
+      "source_issue_id": "DKT-3",
+      "target_issue_id": "DKT-4",
+      "relation_type": "blocks",
+      "created_at": "2026-01-05T00:00:00Z"
+    }
+  ],
+  "labels": [
+    {
+      "id": 1,
+      "name": "backend",
+      "color": "#0075ca"
+    }
+  ],
+  "issue_label_mappings": [],
+  "issue_file_mappings": []
+}

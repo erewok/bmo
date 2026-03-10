@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="issue-detail">
+  <h1>BMO-{{ issue.id }}: {{ issue.title }}</h1>
+  <div class="meta">
+    <span class="badge">{{ issue.status }}</span>
+    <span class="badge priority-{{ issue.priority }}">{{ issue.priority }}</span>
+    <span class="badge kind-{{ issue.kind }}">{{ issue.kind }}</span>
+    {% if issue.assignee %}<span>{{ issue.assignee }}</span>{% endif %}
+  </div>
+  {% if issue.description %}
+  <pre class="description">{{ issue.description }}</pre>
+  {% endif %}
+  {% if comments %}
+  <h2>Comments</h2>
+  {% for c in comments %}
+  <div class="comment"><strong>{{ c.author | default("anonymous") }}</strong>: {{ c.body }}</div>
+  {% endfor %}
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Issues</h1>
+<table>
+<thead><tr><th>ID</th><th>Title</th><th>Status</th><th>Priority</th><th>Kind</th></tr></thead>
+<tbody>
+{% for issue in issues %}
+<tr>
+  <td><a href="/issues/{{ issue.id }}">BMO-{{ issue.id }}</a></td>
+  <td>{{ issue.title }}</td>
+  <td>{{ issue.status }}</td>
+  <td>{{ issue.priority }}</td>
+  <td>{{ issue.kind }}</td>
+</tr>
+{% else %}
+<tr><td colspan="5">No issues found.</td></tr>
+{% endfor %}
+</tbody>
+</table>
+{% endblock %}

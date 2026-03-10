@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="board">
+  {% for col in columns %}
+  <div class="column">
+    <div class="column-header">{{ col.label }} <span class="count">{{ col.issues | length }}</span></div>
+    {% for issue in col.issues %}
+    <div class="card">
+      <div class="card-id">BMO-{{ issue.id }}</div>
+      <div class="card-title"><a href="/issues/{{ issue.id }}">{{ issue.title }}</a></div>
+      <div class="card-meta">
+        <span class="badge priority-{{ issue.priority }}">{{ issue.priority }}</span>
+        <span class="badge kind-{{ issue.kind }}">{{ issue.kind }}</span>
+      </div>
+    </div>
+    {% else %}
+    <div class="empty">Empty</div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
