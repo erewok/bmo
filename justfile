@@ -1,5 +1,8 @@
 # bmo build recipes
 
+_default:
+    just --list
+
 # Run all tests
 test:
     cargo test
@@ -21,5 +24,6 @@ clean:
 install:
     cargo install --path .
 
+# Run cargo fmt
 fmt:
     cargo fmt

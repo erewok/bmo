@@ -2,8 +2,16 @@
 name = "bmo"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85"
 description = "Local-first SQLite-backed CLI issue tracker for AI agents"
 license = "MIT"
+repository = "https://github.com/erewok/bmo"
+homepage = "https://github.com/erewok/bmo"
+documentation = "https://docs.rs/bmo"
+readme = "README.md"
+keywords = ["cli", "issues", "tracker", "sqlite", "ai"]
+categories = ["command-line-utilities", "development-tools"]
+authors = ["Erik Aker <eraker@gmail.com>"]
 
 [[bin]]
 name = "bmo"
