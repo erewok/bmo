@@ -12,6 +12,11 @@ check:
     cargo fmt --check
     cargo clippy -- -D warnings
 
+# Alias for check
+lint:
+    cargo fmt --check
+    cargo clippy -- -D warnings
+
 # Release build
 build:
     cargo build --release

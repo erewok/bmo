@@ -17,6 +17,8 @@ pub async fn start_server(host: &str, port: u16, db_path: PathBuf) -> anyhow::Re
     let state = AppState { db_path, env };
 
     let app = Router::new()
+        .route("/favicon.ico", get(handlers::favicon))
+        .route("/logo.png", get(handlers::logo))
         .route("/", get(|| async { Redirect::permanent("/board") }))
         .route("/board", get(handlers::board_page))
         .route("/issues", get(handlers::issue_list_page))

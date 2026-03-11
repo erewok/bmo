@@ -2,6 +2,8 @@
 
 ![CI](https://github.com/erewok/bmo/actions/workflows/ci.yaml/badge.svg)
 
+![bmo logo](https://raw.githubusercontent.com/erewok/bmo/main/assets/bmo-full.png)
+
 `bmo` is a local-first command-line issue tracker backed by a single SQLite file, designed for use by both human developers and AI agents operating in a terminal. It requires no server, no network dependency, and no external services. Issues are identified by `BMO-N` IDs.
 
 ## Attribution

@@ -10,7 +10,7 @@
       "priority": "high",
       "kind": "epic",
       "assignee": "",
-      "labels": [],
+      "labels": ["backend", "infra"],
       "files": [],
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z"
@@ -24,8 +24,8 @@
       "priority": "critical",
       "kind": "task",
       "assignee": "alice",
-      "labels": [],
-      "files": [],
+      "labels": ["backend"],
+      "files": ["migrations/001_initial.sql", "migrations/002_indexes.sql"],
       "created_at": "2026-01-02T00:00:00Z",
       "updated_at": "2026-01-10T00:00:00Z"
     },
@@ -38,8 +38,8 @@
       "priority": "high",
       "kind": "feature",
       "assignee": "bob",
-      "labels": [],
-      "files": [],
+      "labels": ["backend", "api"],
+      "files": ["src/api/routes.rs"],
       "created_at": "2026-01-03T00:00:00Z",
       "updated_at": "2026-01-12T00:00:00Z"
     },
@@ -88,6 +88,20 @@
       "target_issue_id": "DKT-4",
       "relation_type": "blocks",
       "created_at": "2026-01-05T00:00:00Z"
+    },
+    {
+      "id": 3,
+      "source_issue_id": "DKT-4",
+      "target_issue_id": "DKT-3",
+      "relation_type": "depends-on",
+      "created_at": "2026-01-06T00:00:00Z"
+    },
+    {
+      "id": 4,
+      "source_issue_id": "DKT-1",
+      "target_issue_id": "DKT-3",
+      "relation_type": "relates-to",
+      "created_at": "2026-01-06T00:00:00Z"
     }
   ],
   "labels": [
@@ -95,8 +109,48 @@
       "id": 1,
       "name": "backend",
       "color": "#0075ca"
+    },
+    {
+      "id": 2,
+      "name": "api",
+      "color": "#e4e669"
+    },
+    {
+      "id": 3,
+      "name": "infra",
+      "color": "#d93f0b"
     }
   ],
-  "issue_label_mappings": [],
-  "issue_file_mappings": []
+  "files": [
+    {
+      "issue_id": "DKT-2",
+      "path": "migrations/001_initial.sql"
+    },
+    {
+      "issue_id": "DKT-2",
+      "path": "migrations/002_indexes.sql"
+    },
+    {
+      "issue_id": "DKT-3",
+      "path": "src/api/routes.rs"
+    }
+  ],
+  "activity": [
+    {
+      "issue_id": "DKT-2",
+      "field_changed": "status",
+      "old_value": "in-progress",
+      "new_value": "done",
+      "changed_by": "alice",
+      "created_at": "2026-01-10T00:00:00Z"
+    },
+    {
+      "issue_id": "DKT-3",
+      "field_changed": "assignee",
+      "old_value": "",
+      "new_value": "bob",
+      "changed_by": "admin",
+      "created_at": "2026-01-03T08:00:00Z"
+    }
+  ]
 }

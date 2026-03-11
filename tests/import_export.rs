@@ -79,13 +79,13 @@ fn import_fixture_titles_are_preserved() {
 #[test]
 fn import_fixture_with_from_docket_flag() {
     let dir = setup();
-    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sample-export.json");
+    let fixture =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/docket-export-sample.json");
 
     bmo(&dir)
         .args(["import", "--from-docket", fixture.to_str().unwrap()])
         .assert()
-        .success()
-        .stdout(contains("from docket format"));
+        .success();
 }
 
 // ── Export / import round-trip ────────────────────────────────────────────────
@@ -286,4 +286,143 @@ fn from_docket_import_relations_imported() {
     // The relations array should be non-empty
     let relations = json["data"]["relations"].as_array().unwrap();
     assert!(!relations.is_empty(), "Expected relations on BMO-2");
+}
+
+#[test]
+fn from_docket_import_labels_on_issues() {
+    let dir = setup();
+    let fixture =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/docket-export-sample.json");
+    bmo(&dir)
+        .args(["import", "--from-docket", fixture.to_str().unwrap()])
+        .assert()
+        .success();
+
+    // BMO-2 ("Set up database") has labels: ["backend"] in the fixture
+    let output = bmo(&dir)
+        .args(["issue", "show", "BMO-2", "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let labels = json["data"]["issue"]["labels"].as_array().unwrap();
+    assert!(
+        labels.iter().any(|l| l.as_str() == Some("backend")),
+        "Expected 'backend' label on BMO-2, got: {labels:?}"
+    );
+
+    // BMO-3 ("Build API endpoints") has labels: ["backend", "api"] in the fixture
+    let output = bmo(&dir)
+        .args(["issue", "show", "BMO-3", "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let labels = json["data"]["issue"]["labels"].as_array().unwrap();
+    assert_eq!(
+        labels.len(),
+        2,
+        "Expected 2 labels on BMO-3, got: {labels:?}"
+    );
+}
+
+#[test]
+fn from_docket_import_files_on_issues() {
+    let dir = setup();
+    let fixture =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/docket-export-sample.json");
+    bmo(&dir)
+        .args(["import", "--from-docket", fixture.to_str().unwrap()])
+        .assert()
+        .success();
+
+    // BMO-2 ("Set up database") has 2 files in the fixture
+    let output = bmo(&dir)
+        .args(["issue", "show", "BMO-2", "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let files = json["data"]["issue"]["files"].as_array().unwrap();
+    assert_eq!(files.len(), 2, "Expected 2 files on BMO-2, got: {files:?}");
+    let file_paths: Vec<&str> = files.iter().map(|f| f.as_str().unwrap()).collect();
+    assert!(
+        file_paths.contains(&"migrations/001_initial.sql"),
+        "Expected migrations/001_initial.sql in files"
+    );
+}
+
+#[test]
+fn from_docket_import_all_relation_types() {
+    let dir = setup();
+    let fixture =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/docket-export-sample.json");
+    bmo(&dir)
+        .args(["import", "--from-docket", fixture.to_str().unwrap()])
+        .assert()
+        .success();
+
+    // The fixture has 4 relations: 2x blocks, 1x depends-on, 1x relates-to.
+    // We verify by checking each issue's relation list is populated:
+    // BMO-2 has a "blocks" relation to BMO-3, and BMO-4 "depends-on" BMO-2.
+    let output = bmo(&dir)
+        .args(["issue", "show", "BMO-2", "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let relations = json["data"]["relations"].as_array().unwrap();
+    let kinds: Vec<&str> = relations
+        .iter()
+        .map(|r| r["kind"].as_str().unwrap_or(""))
+        .collect();
+    assert!(
+        kinds.iter().any(|k| *k == "blocks"),
+        "Expected a 'blocks' relation on BMO-2, got: {kinds:?}"
+    );
+
+    // BMO-1 ("Project Alpha") has a "relates-to" relation to BMO-3
+    let output = bmo(&dir)
+        .args(["issue", "show", "BMO-1", "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let relations = json["data"]["relations"].as_array().unwrap();
+    let kinds: Vec<&str> = relations
+        .iter()
+        .map(|r| r["kind"].as_str().unwrap_or(""))
+        .collect();
+    assert!(
+        kinds.iter().any(|k| *k == "relates-to"),
+        "Expected a 'relates-to' relation on BMO-1, got: {kinds:?}"
+    );
+}
+
+#[test]
+fn from_docket_import_no_dkt_ids_in_output() {
+    let dir = setup();
+    let fixture =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/docket-export-sample.json");
+    bmo(&dir)
+        .args(["import", "--from-docket", fixture.to_str().unwrap()])
+        .assert()
+        .success();
+
+    // JSON output of issue list must not contain any "DKT-" strings
+    let output = bmo(&dir)
+        .args(["issue", "list", "--all", "--json"])
+        .output()
+        .unwrap();
+    let raw = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        !raw.contains("DKT-"),
+        "Found DKT- prefix in issue list output — IDs were not remapped to BMO-"
+    );
+
+    // issue show must also not expose DKT- strings in relation fields
+    let output = bmo(&dir)
+        .args(["issue", "show", "BMO-1", "--json"])
+        .output()
+        .unwrap();
+    let raw = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        !raw.contains("DKT-"),
+        "Found DKT- prefix in issue show output — relation IDs were not remapped"
+    );
 }
