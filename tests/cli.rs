@@ -1,12 +1,14 @@
-use assert_cmd::Command;
+use assert_cmd::prelude::*;
+use assert_cmd::cargo;
+use std::process::Command;
 use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 use tempfile::TempDir;
 
+
 fn setup() -> TempDir {
     let dir = TempDir::new().unwrap();
-    Command::cargo_bin("bmo")
-        .unwrap()
+    Command::new(cargo::cargo_bin!("bmo"))
         .current_dir(dir.path())
         .arg("init")
         .assert()
@@ -15,7 +17,7 @@ fn setup() -> TempDir {
 }
 
 fn bmo(dir: &TempDir) -> Command {
-    let mut cmd = Command::cargo_bin("bmo").unwrap();
+    let mut cmd = Command::new(cargo::cargo_bin!("bmo"));
     cmd.current_dir(dir.path());
     cmd
 }
@@ -24,8 +26,7 @@ fn bmo(dir: &TempDir) -> Command {
 
 #[test]
 fn version_prints_version() {
-    Command::cargo_bin("bmo")
-        .unwrap()
+    Command::new(cargo::cargo_bin!("bmo"))
         .arg("version")
         .assert()
         .success()
@@ -37,8 +38,7 @@ fn version_prints_version() {
 #[test]
 fn init_creates_bmo_dir() {
     let dir = TempDir::new().unwrap();
-    Command::cargo_bin("bmo")
-        .unwrap()
+    Command::new(cargo::cargo_bin!("bmo"))
         .current_dir(dir.path())
         .arg("init")
         .assert()
