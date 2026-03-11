@@ -39,7 +39,7 @@ pub async fn start_server(host: &str, port: u16, db_path: PathBuf) -> anyhow::Re
             // Seed initial snapshot so we only emit on real changes.
             let mut last_snapshot: String = tokio::task::spawn_blocking({
                 let p = db_path_bg.clone();
-                move || handlers::board_snapshot_pub(&p)
+                move || handlers::board_snapshot(&p)
             })
             .await
             .ok()
@@ -54,7 +54,7 @@ pub async fn start_server(host: &str, port: u16, db_path: PathBuf) -> anyhow::Re
 
                 let db_path_poll = db_path_bg.clone();
                 let current_snapshot =
-                    tokio::task::spawn_blocking(move || handlers::board_snapshot_pub(&db_path_poll))
+                    tokio::task::spawn_blocking(move || handlers::board_snapshot(&db_path_poll))
                         .await
                         .ok()
                         .and_then(|r| r.ok())

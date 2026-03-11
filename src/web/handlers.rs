@@ -61,27 +61,30 @@ pub async fn board_page(State(state): State<AppState>) -> impl IntoResponse {
         // build the ordered column list for the template.
         let by_status = repo.list_issues_by_status(DEFAULT_LIMIT)?;
 
-        let col_defs: &[(Status, &str)] = &[
-            (Status::Backlog, "Backlog"),
-            (Status::Todo, "Todo"),
-            (Status::InProgress, "In Progress"),
-            (Status::Review, "Review"),
-            (Status::Done, "Done"),
+        let col_defs: &[(&str, &str, Status)] = &[
+            ("backlog", "Backlog", Status::Backlog),
+            ("todo", "Todo", Status::Todo),
+            ("in_progress", "In Progress", Status::InProgress),
+            ("review", "Review", Status::Review),
+            ("done", "Done", Status::Done),
         ];
 
         let columns: Vec<serde_json::Value> = col_defs
             .iter()
-            .map(|(status, label)| -> anyhow::Result<serde_json::Value> {
-                let col_issues_raw = by_status.get(status).map(Vec::as_slice).unwrap_or(&[]);
-                let col_issues: Vec<serde_json::Value> = col_issues_raw
-                    .iter()
-                    .map(|i| serde_json::to_value(i).map_err(|e| anyhow::anyhow!(e)))
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok(serde_json::json!({
-                    "label": label,
-                    "issues": col_issues,
-                }))
-            })
+            .map(
+                |(col_key, label, status)| -> anyhow::Result<serde_json::Value> {
+                    let col_issues_raw = by_status.get(status).map(Vec::as_slice).unwrap_or(&[]);
+                    let col_issues: Vec<serde_json::Value> = col_issues_raw
+                        .iter()
+                        .map(|i| serde_json::to_value(i).map_err(|e| anyhow::anyhow!(e)))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    Ok(serde_json::json!({
+                        "status": col_key,
+                        "label": label,
+                        "issues": col_issues,
+                    }))
+                },
+            )
             .collect::<Result<Vec<_>, _>>()?;
 
         let tmpl = state.env.get_template("board.html")?;
@@ -107,20 +110,8 @@ pub async fn board_page(State(state): State<AppState>) -> impl IntoResponse {
 
 pub async fn issue_list_page(State(state): State<AppState>) -> impl IntoResponse {
     let result = tokio::task::spawn_blocking(move || {
-        let repo = open_db(&state.db_path)?;
-        let issues = repo.list_issues(&IssueFilter {
-            include_done: true,
-            limit: Some(DEFAULT_LIMIT),
-            offset: Some(0),
-            ..Default::default()
-        })?;
-        let issues_json: Vec<serde_json::Value> = issues
-            .iter()
-            .map(|i| serde_json::to_value(i).map_err(|e| anyhow::anyhow!(e)))
-            .collect::<Result<Vec<_>, _>>()?;
-
         let tmpl = state.env.get_template("issue_list.html")?;
-        let html = tmpl.render(context!(issues => issues_json))?;
+        let html = tmpl.render(context!())?;
         anyhow::Ok(html)
     })
     .await;
@@ -666,8 +657,8 @@ pub async fn api_graph(State(state): State<AppState>) -> impl IntoResponse {
 /// Uses the maximum `updated_at` timestamp combined with the total issue count
 /// so that both edits and additions/deletions are detected.
 ///
-/// Public so that the background broadcaster in [`super::mod`] can call it.
-pub fn board_snapshot_pub(db_path: &std::path::Path) -> anyhow::Result<String> {
+/// Public so that the background broadcaster in [`super`] can call it.
+pub fn board_snapshot(db_path: &std::path::Path) -> anyhow::Result<String> {
     let repo = open_db(db_path)?;
     let (count, max_updated) = repo.board_snapshot_stats()?;
     let max_updated_str = max_updated.map(|t| t.to_rfc3339()).unwrap_or_default();
