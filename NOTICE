@@ -1,0 +1,10 @@
+BMO Issue Tracker
+Copyright 2024-2026 Erik Aker
+
+This software was inspired by and adapted from Docket (https://github.com/ALT-F4-LLC/docket),
+an issue tracker for AI agents created by ALT-F4-LLC.
+
+While code in this repository is original, the design concepts, data model architecture,
+and command structure were influenced by and owe significant credit to the Docket project.
+
+The Docket project can be found at: https://github.com/ALT-F4-LLC/docket
