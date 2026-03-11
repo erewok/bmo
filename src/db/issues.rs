@@ -166,6 +166,12 @@ impl SqliteRepository {
             bind.push(Box::new(limit as i64));
         }
 
+        if let Some(offset) = filter.offset {
+            let idx = bind.len() + 1;
+            sql.push_str(&format!(" OFFSET ?{idx}"));
+            bind.push(Box::new(offset as i64));
+        }
+
         let mut stmt = self.conn.prepare(&sql)?;
         let refs: Vec<&dyn rusqlite::ToSql> = bind.iter().map(|b| b.as_ref()).collect();
         let rows = stmt.query_map(refs.as_slice(), row_to_issue)?;
@@ -189,6 +195,100 @@ impl SqliteRepository {
         }
 
         Ok(issues)
+    }
+
+    pub(crate) fn count_issues_impl(&self, filter: &IssueFilter) -> anyhow::Result<i64> {
+        let mut sql = String::from("SELECT COUNT(*) FROM issues WHERE 1=1");
+        let mut bind: Vec<Box<dyn rusqlite::ToSql>> = vec![];
+
+        if !filter.include_done {
+            if let Some(statuses) = &filter.status {
+                if !statuses.is_empty() {
+                    let placeholders = statuses
+                        .iter()
+                        .enumerate()
+                        .map(|(i, _)| format!("?{}", bind.len() + i + 1))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    sql.push_str(&format!(" AND status IN ({placeholders})"));
+                    for s in statuses {
+                        bind.push(Box::new(s.label().to_string()));
+                    }
+                }
+            } else {
+                let idx = bind.len() + 1;
+                sql.push_str(&format!(" AND status != ?{idx}"));
+                bind.push(Box::new("done".to_string()));
+            }
+        }
+
+        if let Some(priorities) = &filter.priority
+            && !priorities.is_empty()
+        {
+            let placeholders = priorities
+                .iter()
+                .enumerate()
+                .map(|(i, _)| format!("?{}", bind.len() + i + 1))
+                .collect::<Vec<_>>()
+                .join(", ");
+            sql.push_str(&format!(" AND priority IN ({placeholders})"));
+            for p in priorities {
+                bind.push(Box::new(p.label().to_string()));
+            }
+        }
+
+        if let Some(kinds) = &filter.kind
+            && !kinds.is_empty()
+        {
+            let placeholders = kinds
+                .iter()
+                .enumerate()
+                .map(|(i, _)| format!("?{}", bind.len() + i + 1))
+                .collect::<Vec<_>>()
+                .join(", ");
+            sql.push_str(&format!(" AND kind IN ({placeholders})"));
+            for k in kinds {
+                bind.push(Box::new(k.label().to_string()));
+            }
+        }
+
+        if let Some(assignee) = &filter.assignee {
+            let idx = bind.len() + 1;
+            sql.push_str(&format!(" AND assignee = ?{idx}"));
+            bind.push(Box::new(assignee.clone()));
+        }
+
+        if let Some(parent_id) = filter.parent_id {
+            let idx = bind.len() + 1;
+            sql.push_str(&format!(" AND parent_id = ?{idx}"));
+            bind.push(Box::new(parent_id));
+        }
+
+        if let Some(search) = &filter.search {
+            let idx = bind.len() + 1;
+            sql.push_str(&format!(
+                " AND (title LIKE ?{idx} OR description LIKE ?{idx})"
+            ));
+            bind.push(Box::new(format!("%{search}%")));
+        }
+
+        // Label filter: require all specified labels via EXISTS subqueries.
+        if let Some(label_filter) = &filter.labels
+            && !label_filter.is_empty()
+        {
+            for label_name in label_filter {
+                let idx = bind.len() + 1;
+                sql.push_str(&format!(
+                    " AND EXISTS (SELECT 1 FROM issue_labels il JOIN labels l ON l.id = il.label_id WHERE il.issue_id = issues.id AND l.name = ?{idx})"
+                ));
+                bind.push(Box::new(label_name.clone()));
+            }
+        }
+
+        let mut stmt = self.conn.prepare(&sql)?;
+        let refs: Vec<&dyn rusqlite::ToSql> = bind.iter().map(|b| b.as_ref()).collect();
+        let count: i64 = stmt.query_row(refs.as_slice(), |r| r.get(0))?;
+        Ok(count)
     }
 
     pub(crate) fn update_issue_impl(
@@ -291,6 +391,20 @@ impl SqliteRepository {
             .prepare_cached("SELECT path FROM issue_files WHERE issue_id = ?1 ORDER BY path")?;
         let rows = stmt.query_map(params![issue_id], |r| r.get(0))?;
         Ok(rows.collect::<rusqlite::Result<Vec<String>>>()?)
+    }
+
+    pub(crate) fn board_snapshot_stats_impl(
+        &self,
+    ) -> anyhow::Result<(i64, Option<chrono::DateTime<chrono::Utc>>)> {
+        let (count, max_updated): (i64, Option<String>) =
+            self.conn
+                .query_row("SELECT COUNT(*), MAX(updated_at) FROM issues", [], |r| {
+                    Ok((r.get(0)?, r.get(1)?))
+                })?;
+        let max_dt = max_updated
+            .as_deref()
+            .and_then(|s| s.parse::<chrono::DateTime<chrono::Utc>>().ok());
+        Ok((count, max_dt))
     }
 
     pub(crate) fn get_stats_impl(&self) -> anyhow::Result<super::Stats> {

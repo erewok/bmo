@@ -25,6 +25,7 @@ pub trait Repository {
     fn create_issue(&self, input: &CreateIssueInput) -> anyhow::Result<Issue>;
     fn get_issue(&self, id: i64) -> anyhow::Result<Option<Issue>>;
     fn list_issues(&self, filter: &IssueFilter) -> anyhow::Result<Vec<Issue>>;
+    fn count_issues(&self, filter: &IssueFilter) -> anyhow::Result<i64>;
     fn update_issue(&self, id: i64, input: &UpdateIssueInput) -> anyhow::Result<Issue>;
     fn delete_issue(&self, id: i64) -> anyhow::Result<()>;
     fn get_sub_issues(&self, parent_id: i64) -> anyhow::Result<Vec<Issue>>;
@@ -67,6 +68,7 @@ pub trait Repository {
 
     // Stats
     fn get_stats(&self) -> anyhow::Result<Stats>;
+    fn board_snapshot_stats(&self) -> anyhow::Result<(i64, Option<chrono::DateTime<chrono::Utc>>)>;
 }
 
 // ── Input types ───────────────────────────────────────────────────────────────

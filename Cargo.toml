@@ -30,6 +30,8 @@ thiserror    = "2.0.18"
 toml         = "0.8"
 tokio        = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
 axum         = "0.7"
+async-stream = "0.3"
+futures-util = { version = "0.3", default-features = false }
 minijinja    = "2"
 
 [dev-dependencies]

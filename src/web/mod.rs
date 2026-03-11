@@ -1,7 +1,11 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use axum::{Router, response::Redirect, routing::get};
+use axum::{
+    Router,
+    response::Redirect,
+    routing::{get, post},
+};
 
 pub mod handlers;
 pub mod templates;
@@ -25,8 +29,10 @@ pub async fn start_server(host: &str, port: u16, db_path: PathBuf) -> anyhow::Re
         .route("/issues/:id", get(handlers::issue_detail_page))
         .route("/api/issues", get(handlers::api_issue_list))
         .route("/api/issues/:id", get(handlers::api_issue_detail))
+        .route("/api/issues/:id/comments", post(handlers::api_post_comment))
         .route("/api/board", get(handlers::api_board))
         .route("/api/stats", get(handlers::api_stats))
+        .route("/api/events", get(handlers::api_events))
         .with_state(state);
 
     let addr = format!("{host}:{port}");

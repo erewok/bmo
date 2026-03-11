@@ -11,6 +11,7 @@ pub struct FilterBuilder {
     pub parent_id: Option<String>,
     pub search: Option<String>,
     pub limit: usize,
+    pub offset: usize,
     pub include_done: bool,
 }
 
@@ -73,6 +74,11 @@ impl FilterBuilder {
                 None
             } else {
                 Some(self.limit)
+            },
+            offset: if self.offset == 0 {
+                None
+            } else {
+                Some(self.offset)
             },
             include_done: self.include_done,
         })

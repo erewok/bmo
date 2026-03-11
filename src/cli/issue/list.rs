@@ -57,6 +57,7 @@ pub fn run(args: &ListArgs, json: bool) -> anyhow::Result<()> {
         parent_id: args.parent.clone(),
         search: args.search.clone(),
         limit: args.limit,
+        offset: 0,
         include_done: args.all,
     }
     .build()?;

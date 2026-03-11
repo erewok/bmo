@@ -211,6 +211,7 @@ pub struct IssueFilter {
     pub parent_id: Option<i64>,
     pub search: Option<String>,
     pub limit: Option<usize>,
+    pub offset: Option<usize>,
     pub include_done: bool,
 }
 
