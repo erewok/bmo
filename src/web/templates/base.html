@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>bmo</title>
+  <link rel="icon" href="/favicon.ico" type="image/x-icon">
   <style>
     :root {
       --bg: #0d1117;
@@ -55,11 +56,8 @@
       font-size: 14px;
       font-weight: 500;
     }
-    nav a:first-child {
-      font-size: 16px;
-      font-weight: 700;
-      color: var(--text);
-    }
+    nav a:first-child { display: flex; align-items: center; }
+    nav img.nav-logo { height: 32px; width: auto; }
     nav a:hover { text-decoration: underline; }
     main {
       flex: 1;
@@ -159,7 +157,7 @@
 </head>
 <body>
   <nav>
-    <a href="/board">bmo board</a>
+    <a href="/board"><img src="/logo.png" alt="bmo" class="nav-logo"></a>
     <a href="/issues">Issues</a>
   </nav>
   <main>

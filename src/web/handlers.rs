@@ -1,6 +1,6 @@
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
+    http::{StatusCode, header},
     response::{Html, IntoResponse, Json},
 };
 use minijinja::context;
@@ -9,6 +9,18 @@ use crate::db::{Repository, open_db};
 use crate::model::{IssueFilter, Status};
 
 use super::AppState;
+
+// ── Static asset handlers ─────────────────────────────────────────────────────
+
+pub async fn favicon() -> impl IntoResponse {
+    let bytes = include_bytes!("../../assets/bmo-clear-bg.ico");
+    ([(header::CONTENT_TYPE, "image/x-icon")], bytes.as_ref()).into_response()
+}
+
+pub async fn logo() -> impl IntoResponse {
+    let bytes = include_bytes!("../../assets/bmo-full.png");
+    ([(header::CONTENT_TYPE, "image/png")], bytes.as_ref()).into_response()
+}
 
 // ── HTML page handlers ────────────────────────────────────────────────────────
 

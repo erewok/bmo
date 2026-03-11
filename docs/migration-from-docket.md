@@ -100,6 +100,8 @@ bmo issue show BMO-1
 | Comments            | Yes      |
 | Relations           | Yes      |
 | Labels (catalog)    | Yes      |
+| File path refs      | Yes      |
+| Activity log        | Yes      |
 
 ---
 
@@ -115,6 +117,10 @@ bmo stores `null`. The importer handles this automatically.
 **Priority** — docket supports a `critical` priority level. bmo maps this to `critical`
 as well; if an unrecognized priority is encountered it falls back to `none`.
 
+**Relation types** — bmo supports three relation types: `blocks`, `depends-on`, and
+`relates-to`. Docket relation types are matched by name (case-insensitive). If an
+unrecognized relation type is encountered it falls back to `relates-to`.
+
 ---
 
 ## Known limitations
@@ -123,8 +129,10 @@ as well; if an unrecognized priority is encountered it falls back to `none`.
   (e.g. you exported only a subset of issues), child issues will be imported without
   a parent reference. Re-link them manually with `bmo issue edit BMO-N --parent BMO-M`.
 
-- **Activity log not migrated** — docket's activity/audit history is not preserved.
-  bmo's activity log will start fresh from the point of import.
+- **Activity log entries are best-effort** — docket's activity records are imported
+  when present in the export, but the mapping is approximate. Docket's `field_changed`,
+  `old_value`, `new_value`, and `changed_by` fields are translated to bmo's activity
+  format. Entries referencing issues not in the export are silently skipped.
 
 - **File attachments are path references only** — bmo stores file paths as strings.
   The paths from the docket export are preserved as-is, but no files are copied.
