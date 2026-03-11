@@ -374,7 +374,7 @@ fn from_docket_import_all_relation_types() {
         .map(|r| r["kind"].as_str().unwrap_or(""))
         .collect();
     assert!(
-        kinds.iter().any(|k| *k == "blocks"),
+        kinds.contains(&"blocks"),
         "Expected a 'blocks' relation on BMO-2, got: {kinds:?}"
     );
 
@@ -390,7 +390,7 @@ fn from_docket_import_all_relation_types() {
         .map(|r| r["kind"].as_str().unwrap_or(""))
         .collect();
     assert!(
-        kinds.iter().any(|k| *k == "relates-to"),
+        kinds.contains(&"relates-to"),
         "Expected a 'relates-to' relation on BMO-1, got: {kinds:?}"
     );
 }

@@ -262,7 +262,7 @@ pub async fn api_issue_list(
         }))
         .into_response(),
         Ok(Err(e)) => (
-            StatusCode::BAD_REQUEST,
+            StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"ok": false, "error": e.to_string()})),
         )
             .into_response(),
