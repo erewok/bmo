@@ -479,6 +479,12 @@
       const p = pos.get(n.id);
       if (!p) continue;
 
+      // node.completed === true means this is a done parent included for context.
+      // Only immediate parents (one level up) are marked completed — the API
+      // intentionally stops there to avoid pulling in the full ancestor chain,
+      // which would clutter the graph.  The greyed-out styling below reflects
+      // that these nodes are background context, not active work.
+      // See: api_graph in src/web/handlers.rs for the server-side design note.
       const isCompleted = !!n.completed;
       const statusColor = resolveVar(STATUS_VAR[n.status] || '--text-muted');
       const displayId = 'BMO-' + n.id;

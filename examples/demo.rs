@@ -12,8 +12,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use bmo::db::{AddCommentInput, CreateIssueInput, Repository, UpdateIssueInput, open_db};
-use bmo::model::{IssueFilter, Kind, Priority, Status};
 use bmo::model::relation::RelationKind;
+use bmo::model::{IssueFilter, Kind, Priority, Status};
 use bmo::web::start_server;
 
 // ---------------------------------------------------------------------------
@@ -252,17 +252,23 @@ async fn main() -> anyhow::Result<()> {
         let repo = open_db(&db_path)?;
 
         // Move DB feature: backlog -> todo -> in-progress
-        repo.update_issue(feat_db_id, &UpdateIssueInput {
-            status: Some(Status::Todo),
-            ..Default::default()
-        })?;
+        repo.update_issue(
+            feat_db_id,
+            &UpdateIssueInput {
+                status: Some(Status::Todo),
+                ..Default::default()
+            },
+        )?;
         moved(feat_db_id, Status::Backlog, Status::Todo);
         pause(fast);
 
-        repo.update_issue(feat_db_id, &UpdateIssueInput {
-            status: Some(Status::InProgress),
-            ..Default::default()
-        })?;
+        repo.update_issue(
+            feat_db_id,
+            &UpdateIssueInput {
+                status: Some(Status::InProgress),
+                ..Default::default()
+            },
+        )?;
         moved(feat_db_id, Status::Todo, Status::InProgress);
 
         repo.add_comment(&AddCommentInput {
@@ -278,17 +284,23 @@ async fn main() -> anyhow::Result<()> {
         pause(fast);
 
         // Move CLI feature: backlog -> todo -> in-progress
-        repo.update_issue(feat_cli_id, &UpdateIssueInput {
-            status: Some(Status::Todo),
-            ..Default::default()
-        })?;
+        repo.update_issue(
+            feat_cli_id,
+            &UpdateIssueInput {
+                status: Some(Status::Todo),
+                ..Default::default()
+            },
+        )?;
         moved(feat_cli_id, Status::Backlog, Status::Todo);
         pause(fast);
 
-        repo.update_issue(feat_cli_id, &UpdateIssueInput {
-            status: Some(Status::InProgress),
-            ..Default::default()
-        })?;
+        repo.update_issue(
+            feat_cli_id,
+            &UpdateIssueInput {
+                status: Some(Status::InProgress),
+                ..Default::default()
+            },
+        )?;
         moved(feat_cli_id, Status::Todo, Status::InProgress);
 
         repo.add_comment(&AddCommentInput {
@@ -304,10 +316,13 @@ async fn main() -> anyhow::Result<()> {
         pause(fast);
 
         // Move web feature to todo
-        repo.update_issue(feat_web_id, &UpdateIssueInput {
-            status: Some(Status::Todo),
-            ..Default::default()
-        })?;
+        repo.update_issue(
+            feat_web_id,
+            &UpdateIssueInput {
+                status: Some(Status::Todo),
+                ..Default::default()
+            },
+        )?;
         moved(feat_web_id, Status::Backlog, Status::Todo);
         narrate(&format!(
             "Bob moved the web board feature (BMO-{feat_web_id}) to todo — waiting on the schema first."
@@ -331,7 +346,9 @@ async fn main() -> anyhow::Result<()> {
             "  [~] Added relation: BMO-{feat_web_id} blocked-by BMO-{feat_db_id} (relation #{})",
             rel.id
         );
-        narrate("The graph now shows the dependency chain. Nothing ships until the foundation is laid.");
+        narrate(
+            "The graph now shows the dependency chain. Nothing ships until the foundation is laid.",
+        );
     }
 
     pause_long(fast);
@@ -345,10 +362,13 @@ async fn main() -> anyhow::Result<()> {
     {
         let repo = open_db(&db_path)?;
 
-        repo.update_issue(feat_db_id, &UpdateIssueInput {
-            status: Some(Status::Review),
-            ..Default::default()
-        })?;
+        repo.update_issue(
+            feat_db_id,
+            &UpdateIssueInput {
+                status: Some(Status::Review),
+                ..Default::default()
+            },
+        )?;
         moved(feat_db_id, Status::InProgress, Status::Review);
 
         repo.add_comment(&AddCommentInput {
@@ -360,29 +380,36 @@ async fn main() -> anyhow::Result<()> {
         })?;
         pause(fast);
 
-        repo.update_issue(feat_db_id, &UpdateIssueInput {
-            status: Some(Status::Done),
-            ..Default::default()
-        })?;
+        repo.update_issue(
+            feat_db_id,
+            &UpdateIssueInput {
+                status: Some(Status::Done),
+                ..Default::default()
+            },
+        )?;
         moved(feat_db_id, Status::Review, Status::Done);
 
         repo.add_comment(&AddCommentInput {
             issue_id: feat_db_id,
-            body: "Merged. Schema is live. All tests pass. Closing."
-                .into(),
+            body: "Merged. Schema is live. All tests pass. Closing.".into(),
             author: Some("carol".into()),
         })?;
-        narrate(&format!("BMO-{feat_db_id} is done! The foundation is in place."));
+        narrate(&format!(
+            "BMO-{feat_db_id} is done! The foundation is in place."
+        ));
         pause(fast);
 
         // Now unblock the web feature
         narrate(&format!(
             "The blocker is resolved. Bob moves the web board (BMO-{feat_web_id}) into in-progress."
         ));
-        repo.update_issue(feat_web_id, &UpdateIssueInput {
-            status: Some(Status::InProgress),
-            ..Default::default()
-        })?;
+        repo.update_issue(
+            feat_web_id,
+            &UpdateIssueInput {
+                status: Some(Status::InProgress),
+                ..Default::default()
+            },
+        )?;
         moved(feat_web_id, Status::Todo, Status::InProgress);
 
         repo.add_comment(&AddCommentInput {
@@ -395,17 +422,23 @@ async fn main() -> anyhow::Result<()> {
         pause(fast);
 
         // Alice finishes CLI
-        repo.update_issue(feat_cli_id, &UpdateIssueInput {
-            status: Some(Status::Review),
-            ..Default::default()
-        })?;
+        repo.update_issue(
+            feat_cli_id,
+            &UpdateIssueInput {
+                status: Some(Status::Review),
+                ..Default::default()
+            },
+        )?;
         moved(feat_cli_id, Status::InProgress, Status::Review);
         pause(fast);
 
-        repo.update_issue(feat_cli_id, &UpdateIssueInput {
-            status: Some(Status::Done),
-            ..Default::default()
-        })?;
+        repo.update_issue(
+            feat_cli_id,
+            &UpdateIssueInput {
+                status: Some(Status::Done),
+                ..Default::default()
+            },
+        )?;
         moved(feat_cli_id, Status::Review, Status::Done);
 
         repo.add_comment(&AddCommentInput {
@@ -419,17 +452,23 @@ async fn main() -> anyhow::Result<()> {
         pause(fast);
 
         // Bob's web feature completes
-        repo.update_issue(feat_web_id, &UpdateIssueInput {
-            status: Some(Status::Review),
-            ..Default::default()
-        })?;
+        repo.update_issue(
+            feat_web_id,
+            &UpdateIssueInput {
+                status: Some(Status::Review),
+                ..Default::default()
+            },
+        )?;
         moved(feat_web_id, Status::InProgress, Status::Review);
         pause(fast);
 
-        repo.update_issue(feat_web_id, &UpdateIssueInput {
-            status: Some(Status::Done),
-            ..Default::default()
-        })?;
+        repo.update_issue(
+            feat_web_id,
+            &UpdateIssueInput {
+                status: Some(Status::Done),
+                ..Default::default()
+            },
+        )?;
         moved(feat_web_id, Status::Review, Status::Done);
 
         repo.add_comment(&AddCommentInput {
@@ -439,7 +478,9 @@ async fn main() -> anyhow::Result<()> {
                 .into(),
             author: Some("bob".into()),
         })?;
-        narrate(&format!("BMO-{feat_web_id}: The web board is live. You are literally looking at it right now."));
+        narrate(&format!(
+            "BMO-{feat_web_id}: The web board is live. You are literally looking at it right now."
+        ));
     }
 
     pause_long(fast);
@@ -455,11 +496,14 @@ async fn main() -> anyhow::Result<()> {
         let repo = open_db(&db_path)?;
 
         // Move the pre-existing performance bug to in-progress (it was in backlog)
-        repo.update_issue(bug_perf_id, &UpdateIssueInput {
-            status: Some(Status::InProgress),
-            assignee: Some("alice".into()),
-            ..Default::default()
-        })?;
+        repo.update_issue(
+            bug_perf_id,
+            &UpdateIssueInput {
+                status: Some(Status::InProgress),
+                assignee: Some("alice".into()),
+                ..Default::default()
+            },
+        )?;
         moved(bug_perf_id, Status::Backlog, Status::InProgress);
 
         repo.add_comment(&AddCommentInput {
@@ -469,7 +513,9 @@ async fn main() -> anyhow::Result<()> {
                 .into(),
             author: Some("alice".into()),
         })?;
-        narrate(&format!("BMO-{bug_perf_id}: Alice is on it. 20-minute ETA."));
+        narrate(&format!(
+            "BMO-{bug_perf_id}: Alice is on it. 20-minute ETA."
+        ));
         pause(fast);
 
         // Also create a brand-new bug that was just discovered
@@ -488,14 +534,20 @@ async fn main() -> anyhow::Result<()> {
             actor: Some("demo".into()),
         })?;
         created("Bug", new_bug.id, &new_bug.title);
-        narrate(&format!("BMO-{}: Bob spotted a Safari SSE bug in testing. Assigning to himself.", new_bug.id));
+        narrate(&format!(
+            "BMO-{}: Bob spotted a Safari SSE bug in testing. Assigning to himself.",
+            new_bug.id
+        ));
         pause(fast);
 
         // Resolve the performance bug
-        repo.update_issue(bug_perf_id, &UpdateIssueInput {
-            status: Some(Status::Done),
-            ..Default::default()
-        })?;
+        repo.update_issue(
+            bug_perf_id,
+            &UpdateIssueInput {
+                status: Some(Status::Done),
+                ..Default::default()
+            },
+        )?;
         moved(bug_perf_id, Status::InProgress, Status::Done);
 
         repo.add_comment(&AddCommentInput {
@@ -504,14 +556,19 @@ async fn main() -> anyhow::Result<()> {
                 .into(),
             author: Some("alice".into()),
         })?;
-        narrate(&format!("BMO-{bug_perf_id}: Fixed in under 20 minutes. Alice is a wizard."));
+        narrate(&format!(
+            "BMO-{bug_perf_id}: Fixed in under 20 minutes. Alice is a wizard."
+        ));
         pause(fast);
 
         // Resolve Safari bug
-        repo.update_issue(new_bug.id, &UpdateIssueInput {
-            status: Some(Status::Done),
-            ..Default::default()
-        })?;
+        repo.update_issue(
+            new_bug.id,
+            &UpdateIssueInput {
+                status: Some(Status::Done),
+                ..Default::default()
+            },
+        )?;
         moved(new_bug.id, Status::InProgress, Status::Done);
 
         repo.add_comment(&AddCommentInput {
@@ -521,7 +578,10 @@ async fn main() -> anyhow::Result<()> {
                 .into(),
             author: Some("bob".into()),
         })?;
-        narrate(&format!("BMO-{}: Safari SSE bug squashed. Keepalive ping added.", new_bug.id));
+        narrate(&format!(
+            "BMO-{}: Safari SSE bug squashed. Keepalive ping added.",
+            new_bug.id
+        ));
 
         new_bug.id
     };
@@ -539,17 +599,23 @@ async fn main() -> anyhow::Result<()> {
         let repo = open_db(&db_path)?;
 
         // Move docs task through to done
-        repo.update_issue(task_docs_id, &UpdateIssueInput {
-            status: Some(Status::InProgress),
-            ..Default::default()
-        })?;
+        repo.update_issue(
+            task_docs_id,
+            &UpdateIssueInput {
+                status: Some(Status::InProgress),
+                ..Default::default()
+            },
+        )?;
         moved(task_docs_id, Status::Backlog, Status::InProgress);
         pause(fast);
 
-        repo.update_issue(task_docs_id, &UpdateIssueInput {
-            status: Some(Status::Done),
-            ..Default::default()
-        })?;
+        repo.update_issue(
+            task_docs_id,
+            &UpdateIssueInput {
+                status: Some(Status::Done),
+                ..Default::default()
+            },
+        )?;
         moved(task_docs_id, Status::InProgress, Status::Done);
 
         repo.add_comment(&AddCommentInput {
@@ -559,14 +625,19 @@ async fn main() -> anyhow::Result<()> {
                 .into(),
             author: Some("carol".into()),
         })?;
-        narrate(&format!("BMO-{task_docs_id}: Docs are live. The README is excellent."));
+        narrate(&format!(
+            "BMO-{task_docs_id}: Docs are live. The README is excellent."
+        ));
         pause(fast);
 
         // Close the epic
-        repo.update_issue(epic_id, &UpdateIssueInput {
-            status: Some(Status::Done),
-            ..Default::default()
-        })?;
+        repo.update_issue(
+            epic_id,
+            &UpdateIssueInput {
+                status: Some(Status::Done),
+                ..Default::default()
+            },
+        )?;
         moved(epic_id, Status::Backlog, Status::Done);
 
         repo.add_comment(&AddCommentInput {
@@ -576,7 +647,9 @@ async fn main() -> anyhow::Result<()> {
                 .into(),
             author: Some("demo".into()),
         })?;
-        narrate(&format!("BMO-{epic_id}: Epic closed. NOVA v1.0 is out the door."));
+        narrate(&format!(
+            "BMO-{epic_id}: Epic closed. NOVA v1.0 is out the door."
+        ));
         pause(fast);
 
         // Print summary stats
@@ -599,7 +672,10 @@ async fn main() -> anyhow::Result<()> {
         println!("  Total issues created : {}", stats.total);
         println!("  Comments added       : {total_comments}");
         println!("  Relations created    : {}", all_relations.len());
-        println!("  Issues done          : {}", stats.by_status.get("done").copied().unwrap_or(0));
+        println!(
+            "  Issues done          : {}",
+            stats.by_status.get("done").copied().unwrap_or(0)
+        );
         println!();
         narrate("Take a final look at the board — every column tells the story of a sprint.");
     }

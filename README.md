@@ -7,7 +7,7 @@
 
 ## Attribution
 
-`bmo` was inspired by and adapted from [docket](https://github.com/ALT-F4-LLC/docket), an issue tracker for AI agents written by **ALT-F4-LLC**. The design, data model, and command structure of BMO all owe a direct debt to that project, and all credit for the underlying ideas in this project belongs there.
+`bmo` was inspired by and adapted from [docket](https://github.com/ALT-F4-LLC/docket), an issue tracker for AI agents written by **ALT-F4-LLC**. The design, data model, and command structure of BMO all owe a direct debt to that project, and all credit for the underlying ideas belongs there.
 
 In addition, the code in this repository was written by [Claude Code](https://claude.ai/claude-code), Anthropic's AI coding assistant. The repo owner directed this work.
 

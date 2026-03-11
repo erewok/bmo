@@ -1,10 +1,9 @@
-use assert_cmd::prelude::*;
 use assert_cmd::cargo;
-use std::process::Command;
+use assert_cmd::prelude::*;
 use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
+use std::process::Command;
 use tempfile::TempDir;
-
 
 fn setup() -> TempDir {
     let dir = TempDir::new().unwrap();
@@ -26,11 +25,12 @@ fn bmo(dir: &TempDir) -> Command {
 
 #[test]
 fn version_prints_version() {
+    let version = env!("CARGO_PKG_VERSION");
     Command::new(cargo::cargo_bin!("bmo"))
         .arg("version")
         .assert()
         .success()
-        .stdout(contains("0.1.0"));
+        .stdout(contains(version));
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────

@@ -9,13 +9,13 @@
     {% if issue.assignee %}<span>{{ issue.assignee }}</span>{% endif %}
   </div>
   {% if issue.description %}
-  <pre class="description">{{ issue.description }}</pre>
+  <div class="description">{{ issue.description | markdown }}</div>
   {% endif %}
 
   {% if comments %}
   <h2>Comments</h2>
   {% for c in comments %}
-  <div class="comment"><strong>{{ c.author | default("anonymous") }}</strong>: {{ c.body }}</div>
+  <div class="comment"><strong>{{ c.author | default("anonymous") }}</strong><div class="comment-body">{{ c.body | markdown }}</div></div>
   {% endfor %}
   {% endif %}
 
@@ -172,17 +172,8 @@
       submitBtn.disabled = disabled;
     }
 
-    function appendComment(body) {
-      const div = document.createElement('div');
-      div.className = 'comment comment-new';
-      div.innerHTML = '<strong>anonymous</strong>: ' + escapeHtml(body);
-      commentList.appendChild(div);
-    }
-
-    function escapeHtml(str) {
-      const d = document.createElement('div');
-      d.appendChild(document.createTextNode(str));
-      return d.innerHTML;
+    function reloadAfterComment() {
+      window.location.reload();
     }
 
     // Show warning banner on page load if already in-progress
@@ -210,8 +201,7 @@
         });
 
         if (response.status === 201) {
-          appendComment(body);
-          textarea.value = '';
+          reloadAfterComment();
         } else if (response.status === 409) {
           showError('This issue is currently in progress. Your comment was not saved.');
         } else {

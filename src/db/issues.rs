@@ -410,37 +410,25 @@ impl SqliteRepository {
             Status::Done,
         ];
 
-        // Pre-populate every key so callers always get a full map even when a
-        // column is empty.
-        let mut map: HashMap<Status, Vec<Issue>> = all_statuses
-            .iter()
-            .map(|s| (*s, Vec::new()))
-            .collect();
-
-        // Single query: fetch up to limit_per_status * 5 rows across all
-        // statuses, sorted by priority DESC then id ASC (matches list_issues).
-        let ceiling = (limit_per_status * all_statuses.len()) as i64;
-        let mut stmt = self.conn.prepare(
-            "SELECT id, parent_id, title, description, status, priority, kind, assignee, \
-             created_at, updated_at \
-             FROM issues \
-             ORDER BY priority DESC, id ASC \
-             LIMIT ?1",
-        )?;
-
-        let rows = stmt.query_map(rusqlite::params![ceiling], row_to_issue)?;
-        for r in rows {
-            let mut issue = r?;
-            issue.labels = self.get_issue_label_names(issue.id)?;
-            issue.files = self.get_issue_file_paths(issue.id)?;
-
-            if let Some(bucket) = map.get_mut(&issue.status) {
-                if bucket.len() < limit_per_status {
-                    bucket.push(issue);
-                }
-            }
-            // Issues whose status doesn't map to a canonical column are silently
-            // ignored (defensive; in practice all statuses are canonical).
+        // Issue one query per status so each column always returns up to
+        // limit_per_status items regardless of how the data is distributed
+        // across statuses. All queries run on the same connection (self.conn
+        // via list_issues_impl), no additional DB opens needed.
+        //
+        // Setting include_done: false with an explicit status filter causes
+        // list_issues_impl to emit `AND status IN (?)` — correct for all five
+        // statuses including Done, because the explicit filter takes priority
+        // over the default done-exclusion clause.
+        let mut map: HashMap<Status, Vec<Issue>> = HashMap::with_capacity(all_statuses.len());
+        for status in &all_statuses {
+            let filter = crate::model::IssueFilter {
+                status: Some(vec![*status]),
+                include_done: false,
+                limit: Some(limit_per_status),
+                ..Default::default()
+            };
+            let issues = self.list_issues_impl(&filter)?;
+            map.insert(*status, issues);
         }
 
         Ok(map)

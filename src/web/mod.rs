@@ -14,11 +14,17 @@ pub mod templates;
 pub struct AppState {
     pub db_path: PathBuf,
     pub env: Arc<minijinja::Environment<'static>>,
+    pub shutdown: tokio::sync::watch::Receiver<bool>,
 }
 
 pub async fn start_server(host: &str, port: u16, db_path: PathBuf) -> anyhow::Result<()> {
     let env = Arc::new(templates::make_env());
-    let state = AppState { db_path, env };
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+    let state = AppState {
+        db_path,
+        env,
+        shutdown: shutdown_rx,
+    };
 
     let app = Router::new()
         .route("/favicon.ico", get(handlers::favicon))
@@ -42,9 +48,10 @@ pub async fn start_server(host: &str, port: u16, db_path: PathBuf) -> anyhow::Re
     println!("bmo web running at http://{addr}");
     println!("Press Ctrl+C to stop.");
     axum::serve(listener, app)
-        .with_graceful_shutdown(async {
+        .with_graceful_shutdown(async move {
             tokio::signal::ctrl_c().await.ok();
             println!("\nbmo web shutting down.");
+            let _ = shutdown_tx.send(true);
         })
         .await?;
     Ok(())

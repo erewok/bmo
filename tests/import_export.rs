@@ -1,5 +1,5 @@
-use assert_cmd::prelude::*;
 use assert_cmd::cargo;
+use assert_cmd::prelude::*;
 use std::path::Path;
 use std::process::Command;
 

@@ -325,18 +325,20 @@ pub async fn api_board(
 
         let columns: Vec<serde_json::Value> = col_defs
             .iter()
-            .map(|(col_key, label, status)| -> anyhow::Result<serde_json::Value> {
-                let col_issues_raw = by_status.get(status).map(Vec::as_slice).unwrap_or(&[]);
-                let col_json: Vec<serde_json::Value> = col_issues_raw
-                    .iter()
-                    .map(|i| serde_json::to_value(i).map_err(|e| anyhow::anyhow!(e)))
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok(serde_json::json!({
-                    "status": col_key,
-                    "label": label,
-                    "issues": col_json,
-                }))
-            })
+            .map(
+                |(col_key, label, status)| -> anyhow::Result<serde_json::Value> {
+                    let col_issues_raw = by_status.get(status).map(Vec::as_slice).unwrap_or(&[]);
+                    let col_json: Vec<serde_json::Value> = col_issues_raw
+                        .iter()
+                        .map(|i| serde_json::to_value(i).map_err(|e| anyhow::anyhow!(e)))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    Ok(serde_json::json!({
+                        "status": col_key,
+                        "label": label,
+                        "issues": col_json,
+                    }))
+                },
+            )
             .collect::<Result<Vec<_>, _>>()?;
 
         anyhow::Ok(serde_json::json!({ "columns": columns }))
@@ -493,11 +495,15 @@ pub async fn api_events(
             .unwrap_or_default()
     };
 
+    let mut shutdown = state.shutdown.clone();
+
     let sse_stream = async_stream::stream! {
         let mut last_snapshot = initial_snapshot;
         loop {
-            // Wait 3 seconds between polls.
-            tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+            tokio::select! {
+                _ = tokio::time::sleep(tokio::time::Duration::from_secs(3)) => {}
+                _ = shutdown.changed() => { break; }
+            }
 
             let db_path = state.db_path.clone();
             let current_snapshot =
@@ -580,13 +586,26 @@ pub async fn api_graph(State(state): State<AppState>) -> impl IntoResponse {
             .collect();
 
         // Collect done immediate parents of any active issue.
+        //
+        // Design decision: only one level up (direct parent_id) is included here.
+        // Pulling in the full ancestor chain would drag in large swaths of the
+        // hierarchy that are irrelevant to day-to-day work, making the graph
+        // noisy and hard to read.  One level is enough to provide context for
+        // an active issue without overwhelming the view.
+        //
+        // Future work: if multi-level traversal is ever wanted, consider adding
+        // a `?depth=N` query parameter to this endpoint and walking the ancestor
+        // chain up to N steps.
         let completed_parent_ids: HashSet<i64> = all_issues
             .iter()
             .filter(|i| active_ids.contains(&i.id))
             .filter_map(|i| i.parent_id)
             .filter(|pid| {
                 // Only include if the parent is done and not already active.
-                by_id.get(pid).map(|p| p.status == Status::Done).unwrap_or(false)
+                by_id
+                    .get(pid)
+                    .map(|p| p.status == Status::Done)
+                    .unwrap_or(false)
                     && !active_ids.contains(pid)
             })
             .collect();
