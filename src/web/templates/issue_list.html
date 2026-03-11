@@ -367,6 +367,19 @@
 
   // Initial load
   fetchIssues(0, false);
+
+  // Subscribe to SSE board_updated events — re-fetch the list on each change.
+  (function connectSSE() {
+    var es = new EventSource('/api/events');
+
+    es.addEventListener('board_updated', function () {
+      resetAndFetch();
+    });
+
+    es.onerror = function (err) {
+      console.warn('bmo SSE error on issue list; will retry automatically', err);
+    };
+  })();
 })();
 </script>
 {% endblock %}
