@@ -57,8 +57,11 @@ pub async fn board_page(State(state): State<AppState>) -> impl IntoResponse {
     let result = tokio::task::spawn_blocking(move || {
         let repo = open_db(&state.db_path)?;
 
-        // Group issues by status into column objects, applying a per-column limit
-        let statuses = [
+        // Fetch all board columns in a single DB round-trip, then build the
+        // ordered column list for the template.
+        let by_status = repo.list_issues_by_status(DEFAULT_LIMIT)?;
+
+        let col_defs: &[(Status, &str)] = &[
             (Status::Backlog, "Backlog"),
             (Status::Todo, "Todo"),
             (Status::InProgress, "In Progress"),
@@ -66,19 +69,10 @@ pub async fn board_page(State(state): State<AppState>) -> impl IntoResponse {
             (Status::Done, "Done"),
         ];
 
-        let columns: Vec<serde_json::Value> = statuses
+        let columns: Vec<serde_json::Value> = col_defs
             .iter()
             .map(|(status, label)| -> anyhow::Result<serde_json::Value> {
-                // The Done column intentionally truncates at DEFAULT_LIMIT to keep the board
-                // view focused and performant. Full history is available on the /issues page.
-                // include_done: false defers to the status filter above; Done issues are still
-                // shown because `status` is explicitly set to Status::Done for that column.
-                let col_issues_raw = repo.list_issues(&IssueFilter {
-                    status: Some(vec![*status]),
-                    include_done: false,
-                    limit: Some(DEFAULT_LIMIT),
-                    ..Default::default()
-                })?;
+                let col_issues_raw = by_status.get(status).map(Vec::as_slice).unwrap_or(&[]);
                 let col_issues: Vec<serde_json::Value> = col_issues_raw
                     .iter()
                     .map(|i| serde_json::to_value(i).map_err(|e| anyhow::anyhow!(e)))
@@ -318,7 +312,10 @@ pub async fn api_board(
         let repo = open_db(&state.db_path)?;
         let per_column_limit = params.limit.unwrap_or(DEFAULT_LIMIT);
 
-        let col_statuses: &[(&str, &str, Status)] = &[
+        // Fetch all board columns in a single DB round-trip.
+        let by_status = repo.list_issues_by_status(per_column_limit)?;
+
+        let col_defs: &[(&str, &str, Status)] = &[
             ("backlog", "Backlog", Status::Backlog),
             ("todo", "Todo", Status::Todo),
             ("in_progress", "In Progress", Status::InProgress),
@@ -326,16 +323,11 @@ pub async fn api_board(
             ("done", "Done", Status::Done),
         ];
 
-        let columns: Vec<serde_json::Value> = col_statuses
+        let columns: Vec<serde_json::Value> = col_defs
             .iter()
             .map(|(col_key, label, status)| -> anyhow::Result<serde_json::Value> {
-                let col_issues = repo.list_issues(&IssueFilter {
-                    status: Some(vec![*status]),
-                    include_done: false,
-                    limit: Some(per_column_limit),
-                    ..Default::default()
-                })?;
-                let col_json: Vec<serde_json::Value> = col_issues
+                let col_issues_raw = by_status.get(status).map(Vec::as_slice).unwrap_or(&[]);
+                let col_json: Vec<serde_json::Value> = col_issues_raw
                     .iter()
                     .map(|i| serde_json::to_value(i).map_err(|e| anyhow::anyhow!(e)))
                     .collect::<Result<Vec<_>, _>>()?;
@@ -567,31 +559,70 @@ pub async fn api_graph(State(state): State<AppState>) -> impl IntoResponse {
     let result = tokio::task::spawn_blocking(move || {
         let repo = open_db(&state.db_path)?;
 
-        // Fetch all issues (include done so the graph is complete)
-        let issues = repo.list_issues(&IssueFilter {
+        // Fetch all issues so we can identify active ones and their parents.
+        let all_issues = repo.list_issues(&IssueFilter {
             include_done: true,
             limit: None,
             offset: None,
             ..Default::default()
         })?;
 
-        let nodes: Vec<serde_json::Value> = issues
+        use std::collections::{HashMap, HashSet};
+
+        // Index all issues by id for parent lookups.
+        let by_id: HashMap<i64, _> = all_issues.iter().map(|i| (i.id, i)).collect();
+
+        // Active issues: status != done.
+        let active_ids: HashSet<i64> = all_issues
             .iter()
-            .map(|i| {
-                serde_json::json!({
-                    "id":       i.id,
-                    "title":    i.title,
-                    "status":   i.status.label(),
-                    "priority": i.priority.label(),
-                    "kind":     i.kind.label(),
-                })
+            .filter(|i| i.status != Status::Done)
+            .map(|i| i.id)
+            .collect();
+
+        // Collect done immediate parents of any active issue.
+        let completed_parent_ids: HashSet<i64> = all_issues
+            .iter()
+            .filter(|i| active_ids.contains(&i.id))
+            .filter_map(|i| i.parent_id)
+            .filter(|pid| {
+                // Only include if the parent is done and not already active.
+                by_id.get(pid).map(|p| p.status == Status::Done).unwrap_or(false)
+                    && !active_ids.contains(pid)
             })
             .collect();
 
-        // Fetch all relations
+        // Union of node ids that will appear in the graph.
+        let visible_ids: HashSet<i64> = active_ids.union(&completed_parent_ids).copied().collect();
+
+        // Build node list: active nodes first, then completed parents.
+        let mut nodes: Vec<serde_json::Value> = Vec::new();
+        for i in &all_issues {
+            if active_ids.contains(&i.id) {
+                nodes.push(serde_json::json!({
+                    "id":        i.id,
+                    "title":     i.title,
+                    "status":    i.status.label(),
+                    "priority":  i.priority.label(),
+                    "kind":      i.kind.label(),
+                    "completed": false,
+                }));
+            } else if completed_parent_ids.contains(&i.id) {
+                nodes.push(serde_json::json!({
+                    "id":        i.id,
+                    "title":     i.title,
+                    "status":    i.status.label(),
+                    "priority":  i.priority.label(),
+                    "kind":      i.kind.label(),
+                    "completed": true,
+                }));
+            }
+        }
+
+        // Fetch all relations; only keep edges where both endpoints are visible.
         let relations = repo.list_all_relations()?;
         let edges: Vec<serde_json::Value> = relations
             .iter()
+            .filter(|r| visible_ids.contains(&r.from_id) && visible_ids.contains(&r.to_id))
             .map(|r| {
                 serde_json::json!({
                     "from": r.from_id,

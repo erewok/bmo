@@ -158,6 +158,19 @@ impl SqliteRepository {
             bind.push(Box::new(format!("%{search}%")));
         }
 
+        // Label filter: require all specified labels via EXISTS subqueries (AND semantics).
+        if let Some(label_filter) = &filter.labels
+            && !label_filter.is_empty()
+        {
+            for label_name in label_filter {
+                let idx = bind.len() + 1;
+                sql.push_str(&format!(
+                    " AND EXISTS (SELECT 1 FROM issue_labels il JOIN labels l ON l.id = il.label_id WHERE il.issue_id = issues.id AND l.name = ?{idx})"
+                ));
+                bind.push(Box::new(label_name.clone()));
+            }
+        }
+
         sql.push_str(" ORDER BY priority DESC, id ASC");
 
         if let Some(limit) = filter.limit {
@@ -181,17 +194,6 @@ impl SqliteRepository {
             issue.labels = self.get_issue_label_names(issue.id)?;
             issue.files = self.get_issue_file_paths(issue.id)?;
             issues.push(issue);
-        }
-
-        // Label filter (AND semantics)
-        if let Some(label_filter) = &filter.labels
-            && !label_filter.is_empty()
-        {
-            issues.retain(|i| {
-                label_filter
-                    .iter()
-                    .all(|lf| i.labels.iter().any(|l| l == lf))
-            });
         }
 
         Ok(issues)
@@ -391,6 +393,57 @@ impl SqliteRepository {
             .prepare_cached("SELECT path FROM issue_files WHERE issue_id = ?1 ORDER BY path")?;
         let rows = stmt.query_map(params![issue_id], |r| r.get(0))?;
         Ok(rows.collect::<rusqlite::Result<Vec<String>>>()?)
+    }
+
+    pub(crate) fn list_issues_by_status_impl(
+        &self,
+        limit_per_status: usize,
+    ) -> anyhow::Result<std::collections::HashMap<Status, Vec<Issue>>> {
+        use std::collections::HashMap;
+
+        // Canonical column order for the board.
+        let all_statuses = [
+            Status::Backlog,
+            Status::Todo,
+            Status::InProgress,
+            Status::Review,
+            Status::Done,
+        ];
+
+        // Pre-populate every key so callers always get a full map even when a
+        // column is empty.
+        let mut map: HashMap<Status, Vec<Issue>> = all_statuses
+            .iter()
+            .map(|s| (*s, Vec::new()))
+            .collect();
+
+        // Single query: fetch up to limit_per_status * 5 rows across all
+        // statuses, sorted by priority DESC then id ASC (matches list_issues).
+        let ceiling = (limit_per_status * all_statuses.len()) as i64;
+        let mut stmt = self.conn.prepare(
+            "SELECT id, parent_id, title, description, status, priority, kind, assignee, \
+             created_at, updated_at \
+             FROM issues \
+             ORDER BY priority DESC, id ASC \
+             LIMIT ?1",
+        )?;
+
+        let rows = stmt.query_map(rusqlite::params![ceiling], row_to_issue)?;
+        for r in rows {
+            let mut issue = r?;
+            issue.labels = self.get_issue_label_names(issue.id)?;
+            issue.files = self.get_issue_file_paths(issue.id)?;
+
+            if let Some(bucket) = map.get_mut(&issue.status) {
+                if bucket.len() < limit_per_status {
+                    bucket.push(issue);
+                }
+            }
+            // Issues whose status doesn't map to a canonical column are silently
+            // ignored (defensive; in practice all statuses are canonical).
+        }
+
+        Ok(map)
     }
 
     pub(crate) fn board_snapshot_stats_impl(

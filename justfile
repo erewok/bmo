@@ -32,3 +32,7 @@ install:
 # Run cargo fmt
 fmt:
     cargo fmt
+
+# Run the demo
+demo:
+    cargo run --example demo

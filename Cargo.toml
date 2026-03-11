@@ -17,6 +17,10 @@ authors = ["Erik Aker <eraker@gmail.com>"]
 name = "bmo"
 path = "src/main.rs"
 
+[[example]]
+name = "demo"
+path = "examples/demo.rs"
+
 [dependencies]
 anyhow       = "1.0.102"
 chrono       = { version = "0.4", features = ["serde"] }

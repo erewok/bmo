@@ -73,6 +73,24 @@
     font-size: 14px;
   }
 
+  /* Completed (done) parent nodes — greyed out */
+  .graph-node.completed-node {
+    opacity: 0.4;
+  }
+
+  .graph-node.completed-node rect {
+    fill: var(--surface);
+    stroke: var(--border);
+  }
+
+  .graph-node.completed-node .node-title {
+    fill: var(--text-muted);
+  }
+
+  .graph-node.completed-node .node-id {
+    fill: var(--text-subtle);
+  }
+
   .graph-legend {
     margin-bottom: 12px;
     display: flex;
@@ -167,7 +185,7 @@
     </defs>
     <g id="viewport"></g>
   </svg>
-  <div id="empty-msg" class="empty-graph" style="display:none;">No issues or dependency relations found.</div>
+  <div id="empty-msg" class="empty-graph" style="display:none;">No active issues — all done or nothing to show.</div>
 
   <!-- Zoom/pan toolbar -->
   <div class="graph-toolbar" aria-label="Graph controls">
@@ -461,16 +479,19 @@
       const p = pos.get(n.id);
       if (!p) continue;
 
+      const isCompleted = !!n.completed;
       const statusColor = resolveVar(STATUS_VAR[n.status] || '--text-muted');
       const displayId = 'BMO-' + n.id;
-      const shortTitle = n.title.length > 22 ? n.title.slice(0, 21) + '…' : n.title;
+      // Completed nodes get a checkmark appended; reserve space for it
+      const titleMaxLen = isCompleted ? 19 : 22;
+      const shortTitle = n.title.length > titleMaxLen ? n.title.slice(0, titleMaxLen - 1) + '…' : n.title;
 
       const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      g.setAttribute('class', 'graph-node');
+      g.setAttribute('class', 'graph-node' + (isCompleted ? ' completed-node' : ''));
       g.setAttribute('transform', `translate(${p.x},${p.y})`);
       g.setAttribute('role', 'link');
       g.setAttribute('tabindex', '0');
-      g.setAttribute('aria-label', displayId + ' ' + n.title);
+      g.setAttribute('aria-label', displayId + ' ' + n.title + (isCompleted ? ' (completed)' : ''));
       g.addEventListener('click', () => { window.location.href = '/issues/' + n.id; });
       g.addEventListener('keydown', (ev) => {
         if (ev.key === 'Enter' || ev.key === ' ') window.location.href = '/issues/' + n.id;
@@ -484,16 +505,18 @@
       rect.setAttribute('ry', 6);
       g.appendChild(rect);
 
-      // Status stripe (left edge)
-      const stripe = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      stripe.setAttribute('x', 0);
-      stripe.setAttribute('y', 0);
-      stripe.setAttribute('width', 4);
-      stripe.setAttribute('height', NODE_H);
-      stripe.setAttribute('rx', 6);
-      stripe.setAttribute('ry', 6);
-      stripe.setAttribute('fill', statusColor);
-      g.appendChild(stripe);
+      if (!isCompleted) {
+        // Status stripe (left edge) — only for active nodes
+        const stripe = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        stripe.setAttribute('x', 0);
+        stripe.setAttribute('y', 0);
+        stripe.setAttribute('width', 4);
+        stripe.setAttribute('height', NODE_H);
+        stripe.setAttribute('rx', 6);
+        stripe.setAttribute('ry', 6);
+        stripe.setAttribute('fill', statusColor);
+        g.appendChild(stripe);
+      }
 
       // Issue ID text
       const idText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -503,12 +526,12 @@
       idText.textContent = displayId;
       g.appendChild(idText);
 
-      // Title text
+      // Title text (with checkmark for completed nodes)
       const titleText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       titleText.setAttribute('x', 12);
       titleText.setAttribute('y', 34);
       titleText.setAttribute('class', 'node-title');
-      titleText.textContent = shortTitle;
+      titleText.textContent = shortTitle + (isCompleted ? ' ✓' : '');
       g.appendChild(titleText);
 
       viewport.appendChild(g);

@@ -69,6 +69,18 @@ pub trait Repository {
     // Stats
     fn get_stats(&self) -> anyhow::Result<Stats>;
     fn board_snapshot_stats(&self) -> anyhow::Result<(i64, Option<chrono::DateTime<chrono::Utc>>)>;
+
+    // Board
+    /// Fetch issues for all board columns in a single DB round-trip.
+    ///
+    /// Returns a map of Status -> Vec<Issue>, where each vec contains at most
+    /// `limit_per_status` issues ordered by priority DESC, id ASC.  All five
+    /// canonical statuses (backlog, todo, in_progress, review, done) are always
+    /// present as keys, even if the corresponding vec is empty.
+    fn list_issues_by_status(
+        &self,
+        limit_per_status: usize,
+    ) -> anyhow::Result<std::collections::HashMap<Status, Vec<Issue>>>;
 }
 
 // ── Input types ───────────────────────────────────────────────────────────────
