@@ -1,20 +1,372 @@
 {% extends "base.html" %}
 {% block content %}
+<style>
+  .filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 18px;
+    align-items: center;
+  }
+
+  .filter-bar input[type="text"],
+  .filter-bar select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    padding: 6px 10px;
+    outline: none;
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+    min-width: 0;
+  }
+
+  .filter-bar input[type="text"] {
+    flex: 1 1 200px;
+    max-width: 320px;
+  }
+
+  .filter-bar select {
+    flex: 0 0 auto;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b949e' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 28px;
+  }
+
+  .filter-bar input[type="text"]:focus,
+  .filter-bar select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+
+  .filter-bar select option {
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  .results-meta {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+    min-height: 18px;
+  }
+
+  .pagination-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 18px;
+  }
+
+  #issue-tbody tr td:first-child {
+    font-family: ui-monospace, "SFMono-Regular", "Cascadia Code", monospace;
+    font-size: 12px;
+    color: var(--text-subtle);
+  }
+
+  .loading-row td {
+    color: var(--text-muted);
+    font-style: italic;
+    text-align: center;
+  }
+</style>
+
 <h1>Issues</h1>
+
+<div class="filter-bar">
+  <input type="text" id="filter-q" placeholder="Search issues..." autocomplete="off">
+  <select id="filter-status">
+    <option value="">All statuses</option>
+    <option value="backlog">Backlog</option>
+    <option value="todo">Todo</option>
+    <option value="in_progress">In Progress</option>
+    <option value="review">Review</option>
+    <option value="done">Done</option>
+  </select>
+  <select id="filter-kind">
+    <option value="">All kinds</option>
+    <option value="bug">Bug</option>
+    <option value="feature">Feature</option>
+    <option value="task">Task</option>
+    <option value="epic">Epic</option>
+    <option value="chore">Chore</option>
+  </select>
+  <select id="filter-priority">
+    <option value="">All priorities</option>
+    <option value="critical">Critical</option>
+    <option value="high">High</option>
+    <option value="medium">Medium</option>
+    <option value="low">Low</option>
+    <option value="none">None</option>
+  </select>
+</div>
+
+<div class="results-meta" id="results-meta"></div>
+
 <table>
-<thead><tr><th>ID</th><th>Title</th><th>Status</th><th>Priority</th><th>Kind</th></tr></thead>
-<tbody>
-{% for issue in issues %}
-<tr>
-  <td><a href="/issues/{{ issue.id }}">BMO-{{ issue.id }}</a></td>
-  <td>{{ issue.title }}</td>
-  <td>{{ issue.status }}</td>
-  <td>{{ issue.priority }}</td>
-  <td>{{ issue.kind }}</td>
-</tr>
-{% else %}
-<tr><td colspan="5">No issues found.</td></tr>
-{% endfor %}
-</tbody>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Title</th>
+      <th>Status</th>
+      <th>Priority</th>
+      <th>Kind</th>
+    </tr>
+  </thead>
+  <tbody id="issue-tbody">
+    <tr class="loading-row"><td colspan="5">Loading...</td></tr>
+  </tbody>
 </table>
+
+<div class="pagination-bar" id="pagination-bar" style="display:none;">
+  <button class="btn" id="load-more-btn">Load more</button>
+  <span class="results-meta" id="pagination-meta" style="margin-bottom:0;"></span>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var LIMIT = 50;
+  var currentOffset = 0;
+  var currentTotal = 0;
+  var currentFilters = {};
+  var debounceTimer = null;
+  var isLoading = false;
+
+  var qInput       = document.getElementById('filter-q');
+  var statusSelect = document.getElementById('filter-status');
+  var kindSelect   = document.getElementById('filter-kind');
+  var prioritySelect = document.getElementById('filter-priority');
+  var tbody        = document.getElementById('issue-tbody');
+  var resultsMeta  = document.getElementById('results-meta');
+  var paginationBar  = document.getElementById('pagination-bar');
+  var loadMoreBtn  = document.getElementById('load-more-btn');
+  var paginationMeta = document.getElementById('pagination-meta');
+
+  function statusClass(status) {
+    var map = {
+      'backlog':     'status-backlog',
+      'todo':        'status-todo',
+      'in_progress': 'status-in-progress',
+      'in-progress': 'status-in-progress',
+      'review':      'status-review',
+      'done':        'status-done'
+    };
+    return map[status] || '';
+  }
+
+  function statusLabel(status) {
+    var map = {
+      'backlog':     'Backlog',
+      'todo':        'Todo',
+      'in_progress': 'In Progress',
+      'in-progress': 'In Progress',
+      'review':      'Review',
+      'done':        'Done'
+    };
+    return map[status] || status;
+  }
+
+  function priorityClass(priority) {
+    return priority ? 'priority-' + priority : '';
+  }
+
+  function kindClass(kind) {
+    return kind ? 'kind-' + kind : '';
+  }
+
+  function capitalize(s) {
+    if (!s) return '';
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  function buildRow(issue) {
+    var tr = document.createElement('tr');
+
+    var tdId = document.createElement('td');
+    var a = document.createElement('a');
+    a.href = '/issues/' + issue.id;
+    a.textContent = 'BMO-' + issue.id;
+    tdId.appendChild(a);
+
+    var tdTitle = document.createElement('td');
+    tdTitle.textContent = issue.title;
+
+    var tdStatus = document.createElement('td');
+    var statusBadge = document.createElement('span');
+    statusBadge.className = 'badge ' + statusClass(issue.status);
+    statusBadge.textContent = statusLabel(issue.status);
+    tdStatus.appendChild(statusBadge);
+
+    var tdPriority = document.createElement('td');
+    if (issue.priority && issue.priority !== 'none') {
+      var priBadge = document.createElement('span');
+      priBadge.className = 'badge ' + priorityClass(issue.priority);
+      priBadge.textContent = capitalize(issue.priority);
+      tdPriority.appendChild(priBadge);
+    } else {
+      tdPriority.textContent = issue.priority || '';
+    }
+
+    var tdKind = document.createElement('td');
+    if (issue.kind) {
+      var kindBadge = document.createElement('span');
+      kindBadge.className = 'badge ' + kindClass(issue.kind);
+      kindBadge.textContent = capitalize(issue.kind);
+      tdKind.appendChild(kindBadge);
+    }
+
+    tr.appendChild(tdId);
+    tr.appendChild(tdTitle);
+    tr.appendChild(tdStatus);
+    tr.appendChild(tdPriority);
+    tr.appendChild(tdKind);
+    return tr;
+  }
+
+  function buildParams(offset) {
+    var params = new URLSearchParams();
+    params.set('limit', LIMIT);
+    params.set('offset', offset);
+
+    var q = qInput.value.trim();
+    if (q) params.set('q', q);
+
+    var status = statusSelect.value;
+    if (status) {
+      params.set('status', status);
+      if (status === 'done') params.set('include_done', 'true');
+    } else {
+      // No status filter — include done issues so they show up
+      params.set('include_done', 'true');
+    }
+
+    var kind = kindSelect.value;
+    if (kind) params.set('kind', kind);
+
+    var priority = prioritySelect.value;
+    if (priority) params.set('priority', priority);
+
+    return params;
+  }
+
+  function updatePaginationUI() {
+    var shown = currentOffset + LIMIT;
+    if (shown > currentTotal) shown = currentTotal;
+    var hasMore = currentOffset + LIMIT < currentTotal;
+
+    if (currentTotal === 0) {
+      resultsMeta.textContent = 'No issues found.';
+    } else {
+      resultsMeta.textContent = 'Showing ' + shown + ' of ' + currentTotal + ' issue' + (currentTotal !== 1 ? 's' : '');
+    }
+
+    if (hasMore) {
+      paginationBar.style.display = 'flex';
+      paginationMeta.textContent = (currentTotal - shown) + ' more';
+    } else {
+      paginationBar.style.display = 'none';
+    }
+  }
+
+  function fetchIssues(offset, append) {
+    if (isLoading) return;
+    isLoading = true;
+
+    if (!append) {
+      tbody.innerHTML = '<tr class="loading-row"><td colspan="5">Loading...</td></tr>';
+      paginationBar.style.display = 'none';
+      resultsMeta.textContent = '';
+    } else {
+      loadMoreBtn.disabled = true;
+      loadMoreBtn.textContent = 'Loading...';
+    }
+
+    var params = buildParams(offset);
+
+    fetch('/api/issues?' + params.toString())
+      .then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      })
+      .then(function (json) {
+        if (!json.ok) throw new Error(json.error || 'Unknown error');
+
+        currentTotal = json.total;
+        currentOffset = json.offset;
+
+        if (!append) {
+          tbody.innerHTML = '';
+        }
+
+        if (json.data.length === 0 && !append) {
+          var emptyRow = document.createElement('tr');
+          var emptyTd = document.createElement('td');
+          emptyTd.colSpan = 5;
+          emptyTd.textContent = 'No issues found.';
+          emptyRow.appendChild(emptyTd);
+          tbody.appendChild(emptyRow);
+        } else {
+          json.data.forEach(function (issue) {
+            tbody.appendChild(buildRow(issue));
+          });
+        }
+
+        updatePaginationUI();
+      })
+      .catch(function (err) {
+        if (!append) {
+          var errTr = document.createElement('tr');
+          var errTd = document.createElement('td');
+          errTd.colSpan = 5;
+          errTd.style.color = 'var(--critical)';
+          errTd.textContent = 'Error loading issues: ' + err.message;
+          errTr.appendChild(errTd);
+          tbody.innerHTML = '';
+          tbody.appendChild(errTr);
+        }
+        resultsMeta.textContent = 'Error: ' + err.message;
+        paginationBar.style.display = 'none';
+      })
+      .finally(function () {
+        isLoading = false;
+        loadMoreBtn.disabled = false;
+        loadMoreBtn.textContent = 'Load more';
+      });
+  }
+
+  function resetAndFetch() {
+    currentOffset = 0;
+    fetchIssues(0, false);
+  }
+
+  // Debounce text search
+  qInput.addEventListener('input', function () {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(resetAndFetch, 300);
+  });
+
+  // Immediate filter for dropdowns
+  statusSelect.addEventListener('change', resetAndFetch);
+  kindSelect.addEventListener('change', resetAndFetch);
+  prioritySelect.addEventListener('change', resetAndFetch);
+
+  // Load more
+  loadMoreBtn.addEventListener('click', function () {
+    var nextOffset = currentOffset + LIMIT;
+    currentOffset = nextOffset;
+    fetchIssues(nextOffset, true);
+  });
+
+  // Initial load
+  fetchIssues(0, false);
+})();
+</script>
 {% endblock %}

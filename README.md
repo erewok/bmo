@@ -1,16 +1,15 @@
 # bmo
 
-![CI](https://github.com/erewok/bmo/actions/workflows/ci.yaml/badge.svg)
-
 ![bmo logo](https://raw.githubusercontent.com/erewok/bmo/main/assets/bmo-full.png)
 
+![CI](https://github.com/erewok/bmo/actions/workflows/ci.yaml/badge.svg)
 `bmo` is a local-first command-line issue tracker backed by a single SQLite file, designed for use by both human developers and AI agents operating in a terminal. It requires no server, no network dependency, and no external services. Issues are identified by `BMO-N` IDs.
 
 ## Attribution
 
-`bmo` was inspired by and adapted from [docket](https://github.com/ALT-F4-LLC/docket), an issue tracker for AI agents written by **ALT-F4-LLC**. The design, data model, and command structure owe a direct debt to that project, and all credit for the underlying ideas belongs there.
+`bmo` was inspired by and adapted from [docket](https://github.com/ALT-F4-LLC/docket), an issue tracker for AI agents written by **ALT-F4-LLC**. The design, data model, and command structure of BMO all owe a direct debt to that project, and all credit for the underlying ideas in this project belongs there.
 
-The code in this repository was written by [Claude Code](https://claude.ai/claude-code), Anthropic's AI coding assistant. The project owner directed the work and owns the repository.
+In addition, the code in this repository was written by [Claude Code](https://claude.ai/claude-code), Anthropic's AI coding assistant. The repo owner directed this work.
 
 ## Installation
 
@@ -29,12 +28,6 @@ cargo install --path .
 **Pre-built binaries:**
 
 Download the latest binary for your platform from [GitHub Releases](https://github.com/erewok/bmo/releases).
-
-**Homebrew (planned, not yet available):**
-
-```bash
-brew install erewok/tap/bmo
-```
 
 ## Quickstart
 
@@ -382,17 +375,31 @@ bmo import <file> [--from-docket]
 
 #### bmo web
 
-See [Web Interface](#web-interface) for full details.
+`bmo web` starts a local HTTP server at `http://127.0.0.1:7777` by default and opens a browser window automatically. The web interface provides a read-friendly view of all issues, their statuses, comments, labels, and relationships.
+
+To start without opening a browser:
+
+```bash
+bmo web --no-open
+```
+
+To bind to a different port:
+
+```bash
+bmo web --port 8080
+```
+
+The bmo server will use server-sent-events to update the web view.
 
 ---
 
-### Configuration
+### BMO Basics
 
 #### bmo init
 
 Initialize a new bmo project in the current directory. Creates `.bmo/issues.db` and `.bmo/config.toml`. Safe to run on an existing project; it is idempotent.
 
-```
+```bash
 bmo init [--name <project-name>]
 ```
 
@@ -402,24 +409,41 @@ bmo init [--name <project-name>]
 
 #### bmo config
 
-Read or write project configuration. With no flags, prints all current values.
+Project-level settings will be stored in the file `.bmo/config.toml`:
 
+```toml
+project_name = "my-project"
+default_assignee = "me"
+web_port = 7777
+web_host = "127.0.0.1"
 ```
+
+Read and write these values with the command `bmo config`:
+
+```bash
+bmo config                          # print all values
+bmo config --get project_name
+bmo config --set default_assignee=alice
+```
+
+With no flags, `bmo config` prints all current values.
+
+```sh
 bmo config [--get <key>] [--set <key>=<value>]
 ```
+
+Valid keys are: `project_name`, `default_assignee`, `web_port`, `web_host`.
 
 | Flag | Type | Description |
 |---|---|---|
 | `--get <key>` | string | Print the value of a single key |
 | `--set <key>=<value>` | string | Set a key to a value |
 
-Valid keys: `project_name`, `default_assignee`, `web_port`, `web_host`.
-
 #### bmo version
 
 Print the current bmo version.
 
-```
+```sh
 bmo version
 ```
 
@@ -521,26 +545,6 @@ bmo next --json
 
 ---
 
-## Web Interface
-
-`bmo web` starts a local HTTP server at `http://127.0.0.1:7777` by default and opens a browser window automatically. The web interface provides a read-friendly view of all issues, their statuses, comments, labels, and relationships.
-
-To start without opening a browser:
-
-```bash
-bmo web --no-open
-```
-
-To bind to a different port:
-
-```bash
-bmo web --port 8080
-```
-
-The web interface is read-only. All mutations go through the CLI.
-
----
-
 ## Data Storage
 
 All data is stored in `.bmo/issues.db` in the directory where `bmo init` was run. `bmo` walks up the directory tree from the current working directory to find the nearest `.bmo/` directory, so you can run `bmo` commands from any subdirectory of your project.
@@ -550,27 +554,6 @@ To use a database at an explicit path, set the `BMO_DB` environment variable or 
 ```bash
 BMO_DB=/path/to/issues.db bmo issue list
 bmo --db /path/to/issues.db issue list
-```
-
----
-
-## Configuration
-
-`.bmo/config.toml` holds project-level settings:
-
-```toml
-project_name = "my-project"
-default_assignee = "me"
-web_port = 7777
-web_host = "127.0.0.1"
-```
-
-Read and write these values with `bmo config`:
-
-```bash
-bmo config                          # print all values
-bmo config --get project_name
-bmo config --set default_assignee=alice
 ```
 
 ---

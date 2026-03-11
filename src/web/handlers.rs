@@ -318,32 +318,36 @@ pub async fn api_board(
         let repo = open_db(&state.db_path)?;
         let per_column_limit = params.limit.unwrap_or(DEFAULT_LIMIT);
 
-        let col_statuses: &[(&str, Status)] = &[
-            ("backlog", Status::Backlog),
-            ("todo", Status::Todo),
-            ("in_progress", Status::InProgress),
-            ("review", Status::Review),
-            ("done", Status::Done),
+        let col_statuses: &[(&str, &str, Status)] = &[
+            ("backlog", "Backlog", Status::Backlog),
+            ("todo", "Todo", Status::Todo),
+            ("in_progress", "In Progress", Status::InProgress),
+            ("review", "Review", Status::Review),
+            ("done", "Done", Status::Done),
         ];
 
-        let mut board: std::collections::HashMap<&str, Vec<serde_json::Value>> =
-            std::collections::HashMap::new();
+        let columns: Vec<serde_json::Value> = col_statuses
+            .iter()
+            .map(|(col_key, label, status)| -> anyhow::Result<serde_json::Value> {
+                let col_issues = repo.list_issues(&IssueFilter {
+                    status: Some(vec![*status]),
+                    include_done: false,
+                    limit: Some(per_column_limit),
+                    ..Default::default()
+                })?;
+                let col_json: Vec<serde_json::Value> = col_issues
+                    .iter()
+                    .map(|i| serde_json::to_value(i).map_err(|e| anyhow::anyhow!(e)))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(serde_json::json!({
+                    "status": col_key,
+                    "label": label,
+                    "issues": col_json,
+                }))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
-        for (col_key, status) in col_statuses {
-            let col_issues = repo.list_issues(&IssueFilter {
-                status: Some(vec![*status]),
-                include_done: false,
-                limit: Some(per_column_limit),
-                ..Default::default()
-            })?;
-            let col_json: Vec<serde_json::Value> = col_issues
-                .iter()
-                .map(|i| serde_json::to_value(i).map_err(|e| anyhow::anyhow!(e)))
-                .collect::<Result<Vec<_>, _>>()?;
-            board.insert(col_key, col_json);
-        }
-
-        anyhow::Ok(serde_json::to_value(board)?)
+        anyhow::Ok(serde_json::json!({ "columns": columns }))
     })
     .await;
 
@@ -519,7 +523,7 @@ pub async fn api_events(
                 })
                 .to_string();
                 last_snapshot = current_snapshot;
-                yield Ok::<Event, std::convert::Infallible>(Event::default().data(data));
+                yield Ok::<Event, std::convert::Infallible>(Event::default().event("board_updated").data(data));
             }
             // No change — emit nothing; axum KeepAlive handles TCP keepalive.
         }
@@ -530,6 +534,90 @@ pub async fn api_events(
             .interval(tokio::time::Duration::from_secs(15))
             .text("ping"),
     )
+}
+
+// ── GET /graph ────────────────────────────────────────────────────────────────
+
+pub async fn graph_page(State(state): State<AppState>) -> impl IntoResponse {
+    let result = tokio::task::spawn_blocking(move || {
+        let tmpl = state.env.get_template("graph.html")?;
+        let html = tmpl.render(context!())?;
+        anyhow::Ok(html)
+    })
+    .await;
+
+    match result {
+        Ok(Ok(html)) => Html(html).into_response(),
+        Ok(Err(e)) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Html(format!("<pre>Error: {e}</pre>")),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Html(format!("<pre>Error: {e}</pre>")),
+        )
+            .into_response(),
+    }
+}
+
+// ── GET /api/graph ────────────────────────────────────────────────────────────
+
+pub async fn api_graph(State(state): State<AppState>) -> impl IntoResponse {
+    let result = tokio::task::spawn_blocking(move || {
+        let repo = open_db(&state.db_path)?;
+
+        // Fetch all issues (include done so the graph is complete)
+        let issues = repo.list_issues(&IssueFilter {
+            include_done: true,
+            limit: None,
+            offset: None,
+            ..Default::default()
+        })?;
+
+        let nodes: Vec<serde_json::Value> = issues
+            .iter()
+            .map(|i| {
+                serde_json::json!({
+                    "id":       i.id,
+                    "title":    i.title,
+                    "status":   i.status.label(),
+                    "priority": i.priority.label(),
+                    "kind":     i.kind.label(),
+                })
+            })
+            .collect();
+
+        // Fetch all relations
+        let relations = repo.list_all_relations()?;
+        let edges: Vec<serde_json::Value> = relations
+            .iter()
+            .map(|r| {
+                serde_json::json!({
+                    "from": r.from_id,
+                    "to":   r.to_id,
+                    "kind": r.kind.label(),
+                })
+            })
+            .collect();
+
+        anyhow::Ok(serde_json::json!({ "nodes": nodes, "edges": edges }))
+    })
+    .await;
+
+    match result {
+        Ok(Ok(data)) => Json(serde_json::json!({"ok": true, "data": data})).into_response(),
+        Ok(Err(e)) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"ok": false, "error": e.to_string()})),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"ok": false, "error": e.to_string()})),
+        )
+            .into_response(),
+    }
 }
 
 /// Returns a snapshot string representing the current board state.

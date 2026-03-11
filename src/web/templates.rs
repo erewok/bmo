@@ -17,5 +17,7 @@ pub fn make_env() -> Environment<'static> {
         .unwrap();
     env.add_template("issue.html", include_str!("templates/issue.html"))
         .unwrap();
+    env.add_template("graph.html", include_str!("templates/graph.html"))
+        .unwrap();
     env
 }

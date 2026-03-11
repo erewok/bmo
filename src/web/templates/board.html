@@ -1,8 +1,50 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="board">
+<style>
+  /* Live connection indicator */
+  .live-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-subtle);
+    margin-bottom: 16px;
+    user-select: none;
+  }
+
+  .live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-subtle);
+    flex-shrink: 0;
+    transition: background 300ms ease;
+  }
+
+  .live-dot.connected {
+    background: var(--status-done);
+    animation: pulse-dot 2.5s ease-in-out infinite;
+  }
+
+  .live-dot.error {
+    background: var(--critical);
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.4; }
+  }
+</style>
+
+<div class="live-indicator">
+  <span class="live-dot" id="live-dot"></span>
+  <span id="live-label">Connecting...</span>
+</div>
+
+<div class="board" id="board">
   {% for col in columns %}
-  <div class="column">
+  <div class="column" data-status="{{ col.status }}">
     <div class="column-header">{{ col.label }} <span class="count">{{ col.issues | length }}</span></div>
     {% for issue in col.issues %}
     <div class="card">
@@ -19,4 +61,151 @@
   </div>
   {% endfor %}
 </div>
+
+<script>
+(function () {
+  'use strict';
+
+  var dot   = document.getElementById('live-dot');
+  var label = document.getElementById('live-label');
+  var board = document.getElementById('board');
+
+  /* ------------------------------------------------------------------ */
+  /* DOM helpers                                                          */
+  /* ------------------------------------------------------------------ */
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function buildCard(issue) {
+    return [
+      '<div class="card">',
+      '  <div class="card-id">BMO-' + escapeHtml(issue.id) + '</div>',
+      '  <div class="card-title"><a href="/issues/' + escapeHtml(issue.id) + '">' + escapeHtml(issue.title) + '</a></div>',
+      '  <div class="card-meta">',
+      '    <span class="badge priority-' + escapeHtml(issue.priority) + '">' + escapeHtml(issue.priority) + '</span>',
+      '    <span class="badge kind-' + escapeHtml(issue.kind) + '">' + escapeHtml(issue.kind) + '</span>',
+      '  </div>',
+      '</div>'
+    ].join('\n');
+  }
+
+  function buildColumn(col) {
+    var cards = col.issues && col.issues.length
+      ? col.issues.map(buildCard).join('\n')
+      : '<div class="empty">Empty</div>';
+
+    return [
+      '<div class="column" data-status="' + escapeHtml(col.status) + '">',
+      '  <div class="column-header">' + escapeHtml(col.label) +
+          ' <span class="count">' + escapeHtml(col.issues ? col.issues.length : 0) + '</span></div>',
+      cards,
+      '</div>'
+    ].join('\n');
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Board refresh                                                        */
+  /* ------------------------------------------------------------------ */
+
+  function refreshBoard() {
+    fetch('/api/board')
+      .then(function (res) {
+        if (!res.ok) { throw new Error('HTTP ' + res.status); }
+        return res.json();
+      })
+      .then(function (data) {
+        var columns = data && data.data && data.data.columns;
+        if (!Array.isArray(columns)) { return; }
+
+        // Re-render each column in-place by matching data-status attribute.
+        // Columns present in the response but missing from the DOM are appended.
+        var rendered = {};
+
+        columns.forEach(function (col) {
+          var existing = Array.from(board.children).find(function (el) { return el.dataset.status === col.status; });
+          var html = buildColumn(col);
+          var tmp = document.createElement('div');
+          tmp.innerHTML = html;
+          var newCol = tmp.firstElementChild;
+
+          if (existing) {
+            board.replaceChild(newCol, existing);
+          } else {
+            board.appendChild(newCol);
+          }
+          rendered[col.status] = true;
+        });
+
+        // Remove columns no longer in the response
+        Array.prototype.slice.call(board.querySelectorAll('[data-status]')).forEach(function (el) {
+          if (!rendered[el.getAttribute('data-status')]) {
+            board.removeChild(el);
+          }
+        });
+      })
+      .catch(function (err) {
+        console.warn('[bmo] board refresh failed:', err);
+      });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* SSE connection                                                       */
+  /* ------------------------------------------------------------------ */
+
+  function setStatus(state) {
+    dot.className = 'live-dot ' + state;
+    if (state === 'connected') {
+      label.textContent = 'Live';
+    } else if (state === 'error') {
+      label.textContent = 'Reconnecting...';
+    } else {
+      label.textContent = 'Connecting...';
+    }
+  }
+
+  function connect() {
+    var es = new EventSource('/api/events');
+
+    es.addEventListener('open', function () {
+      setStatus('connected');
+    });
+
+    // board_updated is the named event sent by the server
+    es.addEventListener('board_updated', function () {
+      refreshBoard();
+    });
+
+    // Also handle generic message events in case the server sends unnamed events
+    es.addEventListener('message', function (evt) {
+      try {
+        var payload = JSON.parse(evt.data);
+        if (payload && payload.type === 'board_updated') {
+          refreshBoard();
+        }
+      } catch (_) {
+        // non-JSON message; ignore
+      }
+    });
+
+    es.addEventListener('error', function () {
+      setStatus('error');
+      // EventSource reconnects automatically; we just update the indicator.
+      // If the connection is permanently closed (es.readyState === 2),
+      // the browser will not reconnect, so we close and re-open manually.
+      if (es.readyState === EventSource.CLOSED) {
+        es.close();
+        setTimeout(connect, 3000);
+      }
+    });
+  }
+
+  connect();
+}());
+</script>
 {% endblock %}
