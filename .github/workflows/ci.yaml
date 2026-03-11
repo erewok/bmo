@@ -19,6 +19,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -26,14 +29,11 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Check formatting
-        run: cargo fmt --check
-
-      - name: Clippy
-        run: cargo clippy -- -D warnings
+      - name: Run justfile Check
+        run: just check
 
       - name: Test
-        run: cargo test
+        run: just test
 
       - name: Build release
-        run: cargo build --release
+        run: just build

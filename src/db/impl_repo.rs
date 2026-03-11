@@ -20,6 +20,10 @@ impl Repository for SqliteRepository {
         self.list_issues_impl(filter)
     }
 
+    fn count_issues(&self, filter: &IssueFilter) -> anyhow::Result<i64> {
+        self.count_issues_impl(filter)
+    }
+
     fn update_issue(&self, id: i64, input: &UpdateIssueInput) -> anyhow::Result<Issue> {
         self.update_issue_impl(id, input)
     }
@@ -128,5 +132,16 @@ impl Repository for SqliteRepository {
 
     fn get_stats(&self) -> anyhow::Result<Stats> {
         self.get_stats_impl()
+    }
+
+    fn board_snapshot_stats(&self) -> anyhow::Result<(i64, Option<chrono::DateTime<chrono::Utc>>)> {
+        self.board_snapshot_stats_impl()
+    }
+
+    fn list_issues_by_status(
+        &self,
+        limit_per_status: usize,
+    ) -> anyhow::Result<std::collections::HashMap<crate::model::Status, Vec<Issue>>> {
+        self.list_issues_by_status_impl(limit_per_status)
     }
 }

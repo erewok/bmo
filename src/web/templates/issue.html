@@ -2,20 +2,237 @@
 {% block content %}
 <div class="issue-detail">
   <h1>BMO-{{ issue.id }}: {{ issue.title }}</h1>
-  <div class="meta">
-    <span class="badge">{{ issue.status }}</span>
+  <div class="meta" id="issue-meta">
+    <span class="badge" id="status-badge">{{ issue.status }}</span>
     <span class="badge priority-{{ issue.priority }}">{{ issue.priority }}</span>
     <span class="badge kind-{{ issue.kind }}">{{ issue.kind }}</span>
     {% if issue.assignee %}<span>{{ issue.assignee }}</span>{% endif %}
   </div>
   {% if issue.description %}
-  <pre class="description">{{ issue.description }}</pre>
+  <div class="description">{{ issue.description | markdown }}</div>
   {% endif %}
+
   {% if comments %}
   <h2>Comments</h2>
   {% for c in comments %}
-  <div class="comment"><strong>{{ c.author | default("anonymous") }}</strong>: {{ c.body }}</div>
+  <div class="comment"><strong>{{ c.author | default("anonymous") }}</strong><div class="comment-body">{{ c.body | markdown }}</div></div>
   {% endfor %}
   {% endif %}
+
+  <div id="comment-list"></div>
+
+  <h2>Add a Comment</h2>
+
+  <div id="in-progress-warning" class="warning-banner" style="display: none;">
+    This issue is in progress — your comment may be rejected.
+  </div>
+
+  <div id="comment-error" class="comment-error" style="display: none;"></div>
+
+  <form id="comment-form" class="comment-form" novalidate>
+    <textarea
+      id="comment-body"
+      name="body"
+      class="comment-textarea"
+      placeholder="Write a comment..."
+      rows="4"
+      required
+      minlength="1"
+    ></textarea>
+    <div class="comment-form-actions">
+      <button type="submit" id="comment-submit" class="btn btn-primary">Add Comment</button>
+    </div>
+  </form>
 </div>
+
+<style>
+  .warning-banner {
+    background: color-mix(in srgb, var(--high) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--high) 40%, transparent);
+    color: var(--high);
+    border-radius: 6px;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 12px;
+  }
+
+  .comment-error {
+    background: color-mix(in srgb, var(--critical) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--critical) 40%, transparent);
+    color: var(--critical);
+    border-radius: 6px;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 12px;
+  }
+
+  .comment-form {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 8px;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .comment-textarea {
+    width: 100%;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.6;
+    padding: 10px 14px;
+    resize: vertical;
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+    outline: none;
+  }
+
+  .comment-textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+
+  .comment-textarea:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .comment-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 10px;
+  }
+
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  .comment-new {
+    border-color: var(--accent);
+    animation: highlight-fade 1.5s ease forwards;
+  }
+
+  @keyframes highlight-fade {
+    0%   { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+    100% { border-color: var(--border); background: var(--surface); }
+  }
+</style>
+
+<script>
+  (function () {
+    const ISSUE_ID = {{ issue.id }};
+    const INITIAL_STATUS = "{{ issue.status }}"; // safe: server-controlled enum, only [a-z_] chars
+
+    const warningBanner = document.getElementById('in-progress-warning');
+    const errorDiv = document.getElementById('comment-error');
+    const form = document.getElementById('comment-form');
+    const textarea = document.getElementById('comment-body');
+    const submitBtn = document.getElementById('comment-submit');
+    const commentList = document.getElementById('comment-list');
+    const statusBadge = document.getElementById('status-badge');
+
+    // Track current status for polling updates
+    let currentStatus = INITIAL_STATUS;
+
+    function isInProgress(status) {
+      return status === 'in-progress' || status === 'in_progress';
+    }
+
+    function updateWarningBanner(status) {
+      if (isInProgress(status)) {
+        warningBanner.style.display = '';
+      } else {
+        warningBanner.style.display = 'none';
+      }
+    }
+
+    function updateStatusBadge(status) {
+      statusBadge.textContent = status;
+    }
+
+    function showError(msg) {
+      errorDiv.textContent = msg;
+      errorDiv.style.display = '';
+    }
+
+    function clearError() {
+      errorDiv.textContent = '';
+      errorDiv.style.display = 'none';
+    }
+
+    function setFormDisabled(disabled) {
+      textarea.disabled = disabled;
+      submitBtn.disabled = disabled;
+    }
+
+    function reloadAfterComment() {
+      window.location.reload();
+    }
+
+    // Show warning banner on page load if already in-progress
+    updateWarningBanner(currentStatus);
+
+    // Handle form submission
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
+
+      const body = textarea.value.trim();
+      if (!body) {
+        showError('Comment cannot be empty.');
+        textarea.focus();
+        return;
+      }
+
+      clearError();
+      setFormDisabled(true);
+
+      try {
+        const response = await fetch('/api/issues/' + ISSUE_ID + '/comments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ body: body }),
+        });
+
+        if (response.status === 201) {
+          reloadAfterComment();
+        } else if (response.status === 409) {
+          showError('This issue is currently in progress. Your comment was not saved.');
+        } else {
+          showError('An error occurred. Please try again.');
+        }
+      } catch (err) {
+        showError('An error occurred. Please try again.');
+      } finally {
+        setFormDisabled(false);
+      }
+    });
+
+    // Poll for status changes every 5 seconds
+    async function pollStatus() {
+      try {
+        const response = await fetch('/api/issues/' + ISSUE_ID);
+        if (response.ok) {
+          const data = await response.json();
+          const newStatus = data.data && data.data.status;
+          if (newStatus && newStatus !== currentStatus) {
+            currentStatus = newStatus;
+            updateStatusBadge(newStatus);
+            updateWarningBanner(newStatus);
+          }
+        }
+      } catch (_) {
+        // Silently ignore poll errors
+      }
+    }
+
+    setInterval(pollStatus, 5000);
+  })();
+</script>
 {% endblock %}

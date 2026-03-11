@@ -9,13 +9,13 @@ test:
 
 # Check formatting and run clippy
 check:
-    cargo fmt --check
-    cargo clippy -- -D warnings
+    just lint
+    cargo check --all
 
 # Alias for check
 lint:
     cargo fmt --check
-    cargo clippy -- -D warnings
+    cargo clippy --all-targets --all-features -- -D warnings
 
 # Release build
 build:
@@ -32,3 +32,7 @@ install:
 # Run cargo fmt
 fmt:
     cargo fmt
+
+# Run the demo
+demo:
+    cargo run --example demo

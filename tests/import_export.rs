@@ -1,14 +1,15 @@
+use assert_cmd::cargo;
+use assert_cmd::prelude::*;
 use std::path::Path;
+use std::process::Command;
 
-use assert_cmd::Command;
 use predicates::str::contains;
 use tempfile::TempDir;
 
 /// Initialize a fresh bmo project in a temp directory and return the dir handle.
 fn setup() -> TempDir {
     let dir = TempDir::new().unwrap();
-    Command::cargo_bin("bmo")
-        .unwrap()
+    Command::new(cargo::cargo_bin!("bmo"))
         .current_dir(dir.path())
         .arg("init")
         .assert()
@@ -17,7 +18,7 @@ fn setup() -> TempDir {
 }
 
 fn bmo(dir: &TempDir) -> Command {
-    let mut cmd = Command::cargo_bin("bmo").unwrap();
+    let mut cmd = Command::new(cargo::cargo_bin!("bmo"));
     cmd.current_dir(dir.path());
     cmd
 }
@@ -373,7 +374,7 @@ fn from_docket_import_all_relation_types() {
         .map(|r| r["kind"].as_str().unwrap_or(""))
         .collect();
     assert!(
-        kinds.iter().any(|k| *k == "blocks"),
+        kinds.contains(&"blocks"),
         "Expected a 'blocks' relation on BMO-2, got: {kinds:?}"
     );
 
@@ -389,7 +390,7 @@ fn from_docket_import_all_relation_types() {
         .map(|r| r["kind"].as_str().unwrap_or(""))
         .collect();
     assert!(
-        kinds.iter().any(|k| *k == "relates-to"),
+        kinds.contains(&"relates-to"),
         "Expected a 'relates-to' relation on BMO-1, got: {kinds:?}"
     );
 }

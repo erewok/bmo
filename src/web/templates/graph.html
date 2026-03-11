@@ -1,0 +1,572 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .graph-container {
+    width: 100%;
+    height: calc(100vh - 52px - 48px);
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  #graph-svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    cursor: grab;
+  }
+
+  #graph-svg.panning {
+    cursor: grabbing;
+  }
+
+  .graph-node {
+    cursor: pointer;
+  }
+
+  .graph-node rect {
+    rx: 6;
+    ry: 6;
+    fill: var(--surface-raised);
+    stroke: var(--border);
+    stroke-width: 1.5;
+    transition: stroke 120ms ease, filter 120ms ease;
+  }
+
+  .graph-node:hover rect {
+    stroke: var(--accent);
+    filter: drop-shadow(0 2px 6px rgba(88, 166, 255, 0.25));
+  }
+
+  .graph-node .node-id {
+    font-family: ui-monospace, "SFMono-Regular", monospace;
+    font-size: 10px;
+    fill: var(--text-subtle);
+  }
+
+  .graph-node .node-title {
+    font-size: 11px;
+    font-weight: 500;
+    fill: var(--text);
+  }
+
+  .graph-edge {
+    stroke: var(--border);
+    stroke-width: 1.5;
+    fill: none;
+    marker-end: url(#arrowhead);
+  }
+
+  .graph-edge.blocked-by { stroke: var(--critical); }
+  .graph-edge.blocks      { stroke: var(--high); }
+  .graph-edge.depends-on  { stroke: var(--accent); }
+  .graph-edge.relates-to  { stroke: var(--text-muted); stroke-dasharray: 4 3; }
+
+  .empty-graph {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-subtle);
+    font-size: 14px;
+  }
+
+  /* Completed (done) parent nodes — greyed out */
+  .graph-node.completed-node {
+    opacity: 0.4;
+  }
+
+  .graph-node.completed-node rect {
+    fill: var(--surface);
+    stroke: var(--border);
+  }
+
+  .graph-node.completed-node .node-title {
+    fill: var(--text-muted);
+  }
+
+  .graph-node.completed-node .node-id {
+    fill: var(--text-subtle);
+  }
+
+  .graph-legend {
+    margin-bottom: 12px;
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--text-muted);
+    align-items: center;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .legend-line {
+    width: 28px;
+    height: 2px;
+    border-radius: 1px;
+  }
+
+  /* ── Zoom/pan toolbar ─────────────────────────────────────────────────── */
+  .graph-toolbar {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 10;
+  }
+
+  .graph-toolbar button {
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface-raised);
+    color: var(--text);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: background 100ms ease, border-color 100ms ease;
+  }
+
+  .graph-toolbar button:hover {
+    background: var(--surface-hover, var(--border));
+    border-color: var(--accent);
+  }
+
+  .graph-toolbar button:active {
+    opacity: 0.75;
+  }
+
+  .graph-toolbar .tb-reset {
+    font-size: 11px;
+    font-weight: 600;
+  }
+</style>
+
+<h1>Dependency Graph</h1>
+
+<div class="graph-legend">
+  <span style="color: var(--text-subtle); font-weight: 600;">Edge types:</span>
+  <span class="legend-item"><span class="legend-line" style="background: var(--critical);"></span> blocked-by</span>
+  <span class="legend-item"><span class="legend-line" style="background: var(--high);"></span> blocks</span>
+  <span class="legend-item"><span class="legend-line" style="background: var(--accent);"></span> depends-on</span>
+  <span class="legend-item"><span class="legend-line" style="background: var(--text-muted); border: none; border-top: 2px dashed var(--text-muted); height: 0;"></span> relates-to</span>
+  <span style="color: var(--text-subtle); margin-left: 8px;">Click a node to open the issue.</span>
+</div>
+
+<div class="graph-container">
+  <svg id="graph-svg">
+    <defs>
+      <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+        <polygon points="0 0, 8 3, 0 6" fill="var(--border)" />
+      </marker>
+      <marker id="arrowhead-blocked-by" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+        <polygon points="0 0, 8 3, 0 6" fill="var(--critical)" />
+      </marker>
+      <marker id="arrowhead-blocks" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+        <polygon points="0 0, 8 3, 0 6" fill="var(--high)" />
+      </marker>
+      <marker id="arrowhead-depends-on" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+        <polygon points="0 0, 8 3, 0 6" fill="var(--accent)" />
+      </marker>
+    </defs>
+    <g id="viewport"></g>
+  </svg>
+  <div id="empty-msg" class="empty-graph" style="display:none;">No active issues — all done or nothing to show.</div>
+
+  <!-- Zoom/pan toolbar -->
+  <div class="graph-toolbar" aria-label="Graph controls">
+    <button id="tb-zoom-in"  title="Zoom in"  aria-label="Zoom in">+</button>
+    <button id="tb-zoom-out" title="Zoom out" aria-label="Zoom out">&#8722;</button>
+    <button id="tb-reset"    title="Reset view" aria-label="Reset view" class="tb-reset">&#8635;</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  // ── Constants ───────────────────────────────────────────────────────────────
+  const NODE_W = 160;
+  const NODE_H = 48;
+  const H_GAP = 60;
+  const V_GAP = 30;
+  const ZOOM_MIN = 0.1;
+  const ZOOM_MAX = 5.0;
+  const ZOOM_STEP = 0.2; // per toolbar button click
+
+  // Status -> CSS variable name (resolved at paint time)
+  const STATUS_VAR = {
+    'backlog':     '--status-backlog',
+    'todo':        '--status-todo',
+    'in-progress': '--status-in-progress',
+    'review':      '--status-review',
+    'done':        '--status-done',
+  };
+
+  function resolveVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  // ── Zoom/pan state ──────────────────────────────────────────────────────────
+  // transform: translate(tx, ty) scale(scale)
+  let scale = 1;
+  let tx = 0;
+  let ty = 0;
+
+  // Initial "fit" transform saved after render — used by reset button
+  let initScale = 1;
+  let initTx = 0;
+  let initTy = 0;
+
+  const svg = document.getElementById('graph-svg');
+  const viewport = document.getElementById('viewport');
+
+  function applyTransform() {
+    viewport.setAttribute('transform', `translate(${tx},${ty}) scale(${scale})`);
+  }
+
+  function clampScale(s) {
+    return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, s));
+  }
+
+  // ── Wheel zoom (centered on cursor) ────────────────────────────────────────
+  svg.addEventListener('wheel', function (ev) {
+    ev.preventDefault();
+
+    const rect = svg.getBoundingClientRect();
+    // Cursor position in SVG element space
+    const mx = ev.clientX - rect.left;
+    const my = ev.clientY - rect.top;
+
+    const delta = ev.deltaY < 0 ? 1 : -1;
+    const factor = 1 + delta * 0.12;
+    const newScale = clampScale(scale * factor);
+    if (newScale === scale) return;
+
+    // Adjust translate so the point under the cursor stays fixed:
+    // mx = tx + pointX * scale  =>  pointX = (mx - tx) / scale
+    // After zoom: tx' = mx - pointX * newScale
+    tx = mx - (mx - tx) * (newScale / scale);
+    ty = my - (my - ty) * (newScale / scale);
+    scale = newScale;
+    applyTransform();
+  }, { passive: false });
+
+  // ── Click-and-drag pan ──────────────────────────────────────────────────────
+  // We track pointer movement; if the drag distance is small (< 4px) we treat
+  // it as a click — this keeps node navigation working correctly.
+  let dragging = false;
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let dragMoved = false;
+  const DRAG_THRESHOLD = 4; // px
+
+  svg.addEventListener('pointerdown', function (ev) {
+    // Only primary button
+    if (ev.button !== 0) return;
+    dragging = true;
+    dragMoved = false;
+    dragStartX = ev.clientX;
+    dragStartY = ev.clientY;
+    svg.setPointerCapture(ev.pointerId);
+    svg.classList.add('panning');
+  });
+
+  svg.addEventListener('pointermove', function (ev) {
+    if (!dragging) return;
+    const dx = ev.clientX - dragStartX;
+    const dy = ev.clientY - dragStartY;
+    if (!dragMoved && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+      dragMoved = true;
+    }
+    if (dragMoved) {
+      tx += ev.movementX;
+      ty += ev.movementY;
+      applyTransform();
+    }
+  });
+
+  svg.addEventListener('pointerup', function (ev) {
+    dragging = false;
+    svg.classList.remove('panning');
+  });
+
+  svg.addEventListener('pointercancel', function (ev) {
+    dragging = false;
+    svg.classList.remove('panning');
+  });
+
+  // Suppress click events on the SVG when the pointer was dragged, so that
+  // node click handlers don't fire after a pan gesture.
+  svg.addEventListener('click', function (ev) {
+    if (dragMoved) {
+      ev.stopPropagation();
+      dragMoved = false;
+    }
+  }, true /* capture — runs before node handlers */);
+
+  // ── Toolbar buttons ─────────────────────────────────────────────────────────
+  document.getElementById('tb-zoom-in').addEventListener('click', function () {
+    const cx = svg.clientWidth / 2;
+    const cy = svg.clientHeight / 2;
+    const newScale = clampScale(scale + ZOOM_STEP);
+    tx = cx - (cx - tx) * (newScale / scale);
+    ty = cy - (cy - ty) * (newScale / scale);
+    scale = newScale;
+    applyTransform();
+  });
+
+  document.getElementById('tb-zoom-out').addEventListener('click', function () {
+    const cx = svg.clientWidth / 2;
+    const cy = svg.clientHeight / 2;
+    const newScale = clampScale(scale - ZOOM_STEP);
+    tx = cx - (cx - tx) * (newScale / scale);
+    ty = cy - (cy - ty) * (newScale / scale);
+    scale = newScale;
+    applyTransform();
+  });
+
+  document.getElementById('tb-reset').addEventListener('click', function () {
+    scale = initScale;
+    tx = initTx;
+    ty = initTy;
+    applyTransform();
+  });
+
+  // ── Fetch graph data ────────────────────────────────────────────────────────
+  fetch('/api/graph')
+    .then(r => r.json())
+    .then(resp => {
+      if (!resp.ok) { showError(resp.error || 'API error'); return; }
+      const { nodes, edges } = resp.data;
+      if (!nodes || nodes.length === 0) {
+        document.getElementById('empty-msg').style.display = 'flex';
+        return;
+      }
+      render(nodes, edges || []);
+    })
+    .catch(e => showError(e.message));
+
+  function showError(msg) {
+    const el = document.getElementById('empty-msg');
+    el.textContent = 'Error loading graph: ' + msg;
+    el.style.display = 'flex';
+  }
+
+  // ── Layout: topological rank + column assignment ─────────────────────────────
+  //
+  // We do a simple Kahn's BFS to assign depth levels, then place nodes
+  // in columns by depth. Edges flow left-to-right (from dependency to dependent).
+  // Nodes with no relations are placed in column 0.
+  function render(nodes, edges) {
+    // Build adjacency (blocked-by / depends-on edges define DAG direction:
+    // if A blocked-by B then B -> A in the DAG)
+    const nodeMap = new Map(nodes.map(n => [n.id, n]));
+    const dagEdges = []; // { from, to, kind }
+
+    for (const e of edges) {
+      const k = e.kind;
+      if (k === 'blocks' || k === 'depends-on' || k === 'blocked-by' || k === 'dependency-of') {
+        dagEdges.push({ from: e.from, to: e.to, kind: k });
+      } else {
+        // relates-to / duplicates — still draw but don't affect layout
+        dagEdges.push({ from: e.from, to: e.to, kind: k });
+      }
+    }
+
+    // Compute in-degrees for layout edges only (blocks / depends-on define rank)
+    const layoutEdges = edges.filter(e => e.kind === 'blocks' || e.kind === 'depends-on');
+    const inDegree = new Map(nodes.map(n => [n.id, 0]));
+    const outAdj = new Map(nodes.map(n => [n.id, []]));
+
+    for (const e of layoutEdges) {
+      inDegree.set(e.to, (inDegree.get(e.to) || 0) + 1);
+      outAdj.get(e.from).push(e.to);
+    }
+
+    // BFS rank assignment
+    const rank = new Map(nodes.map(n => [n.id, 0]));
+    const queue = [];
+    for (const n of nodes) {
+      if (inDegree.get(n.id) === 0) queue.push(n.id);
+    }
+    const visited = new Set(queue);
+    let qi = 0;
+    while (qi < queue.length) {
+      const cur = queue[qi++];
+      const curRank = rank.get(cur);
+      for (const nxt of (outAdj.get(cur) || [])) {
+        const newRank = curRank + 1;
+        if (newRank > rank.get(nxt)) rank.set(nxt, newRank);
+        if (!visited.has(nxt)) {
+          visited.add(nxt);
+          queue.push(nxt);
+        }
+      }
+    }
+    // Nodes not visited (cycles/disconnected) stay at rank 0
+
+    // Group by rank
+    const byRank = new Map();
+    for (const n of nodes) {
+      const r = rank.get(n.id) || 0;
+      if (!byRank.has(r)) byRank.set(r, []);
+      byRank.get(r).push(n);
+    }
+
+    // Assign x/y positions
+    const pos = new Map(); // id -> {x, y}
+    const maxRank = Math.max(...byRank.keys());
+    const colWidth = NODE_W + H_GAP;
+
+    for (let r = 0; r <= maxRank; r++) {
+      const col = byRank.get(r) || [];
+      col.forEach((n, i) => {
+        pos.set(n.id, {
+          x: r * colWidth + 20,
+          y: i * (NODE_H + V_GAP) + 20,
+        });
+      });
+    }
+
+    // Total graph content dimensions (in graph-space units)
+    const graphW = (maxRank + 1) * colWidth + 20;
+    const graphH = Math.max(...[...byRank.values()].map(col => col.length * (NODE_H + V_GAP))) + 20;
+
+    // ── Draw edges first (behind nodes) ──────────────────────────────────────
+    for (const e of dagEdges) {
+      const p = pos.get(e.from);
+      const q = pos.get(e.to);
+      if (!p || !q) continue;
+
+      const x1 = p.x + NODE_W;
+      const y1 = p.y + NODE_H / 2;
+      const x2 = q.x;
+      const y2 = q.y + NODE_H / 2;
+
+      // Cubic bezier for a smooth curve
+      const cx = (x1 + x2) / 2;
+      const d = `M${x1},${y1} C${cx},${y1} ${cx},${y2} ${x2},${y2}`;
+
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', d);
+      path.setAttribute('class', 'graph-edge ' + (e.kind || ''));
+
+      // Per-kind arrowhead
+      let marker = 'url(#arrowhead)';
+      if (e.kind === 'blocked-by') marker = 'url(#arrowhead-blocked-by)';
+      else if (e.kind === 'blocks') marker = 'url(#arrowhead-blocks)';
+      else if (e.kind === 'depends-on') marker = 'url(#arrowhead-depends-on)';
+      path.setAttribute('marker-end', marker);
+
+      viewport.appendChild(path);
+    }
+
+    // ── Draw nodes ───────────────────────────────────────────────────────────
+    for (const n of nodes) {
+      const p = pos.get(n.id);
+      if (!p) continue;
+
+      // node.completed === true means this is a done parent included for context.
+      // Only immediate parents (one level up) are marked completed — the API
+      // intentionally stops there to avoid pulling in the full ancestor chain,
+      // which would clutter the graph.  The greyed-out styling below reflects
+      // that these nodes are background context, not active work.
+      // See: api_graph in src/web/handlers.rs for the server-side design note.
+      const isCompleted = !!n.completed;
+      const statusColor = resolveVar(STATUS_VAR[n.status] || '--text-muted');
+      const displayId = 'BMO-' + n.id;
+      // Completed nodes get a checkmark appended; reserve space for it
+      const titleMaxLen = isCompleted ? 19 : 22;
+      const shortTitle = n.title.length > titleMaxLen ? n.title.slice(0, titleMaxLen - 1) + '…' : n.title;
+
+      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      g.setAttribute('class', 'graph-node' + (isCompleted ? ' completed-node' : ''));
+      g.setAttribute('transform', `translate(${p.x},${p.y})`);
+      g.setAttribute('role', 'link');
+      g.setAttribute('tabindex', '0');
+      g.setAttribute('aria-label', displayId + ' ' + n.title + (isCompleted ? ' (completed)' : ''));
+      g.addEventListener('click', () => { window.location.href = '/issues/' + n.id; });
+      g.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ') window.location.href = '/issues/' + n.id;
+      });
+
+      // Background rect
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('width', NODE_W);
+      rect.setAttribute('height', NODE_H);
+      rect.setAttribute('rx', 6);
+      rect.setAttribute('ry', 6);
+      g.appendChild(rect);
+
+      if (!isCompleted) {
+        // Status stripe (left edge) — only for active nodes
+        const stripe = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        stripe.setAttribute('x', 0);
+        stripe.setAttribute('y', 0);
+        stripe.setAttribute('width', 4);
+        stripe.setAttribute('height', NODE_H);
+        stripe.setAttribute('rx', 6);
+        stripe.setAttribute('ry', 6);
+        stripe.setAttribute('fill', statusColor);
+        g.appendChild(stripe);
+      }
+
+      // Issue ID text
+      const idText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      idText.setAttribute('x', 12);
+      idText.setAttribute('y', 17);
+      idText.setAttribute('class', 'node-id');
+      idText.textContent = displayId;
+      g.appendChild(idText);
+
+      // Title text (with checkmark for completed nodes)
+      const titleText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      titleText.setAttribute('x', 12);
+      titleText.setAttribute('y', 34);
+      titleText.setAttribute('class', 'node-title');
+      titleText.textContent = shortTitle + (isCompleted ? ' ✓' : '');
+      g.appendChild(titleText);
+
+      viewport.appendChild(g);
+    }
+
+    // ── Compute initial fit-to-screen transform ───────────────────────────────
+    // Wait one frame so the SVG has its rendered dimensions available.
+    requestAnimationFrame(function () {
+      const svgW = svg.clientWidth  || svg.getBoundingClientRect().width;
+      const svgH = svg.clientHeight || svg.getBoundingClientRect().height;
+
+      // Fit the content into the SVG area with a small margin
+      const margin = 24;
+      const fitScale = clampScale(Math.min(
+        (svgW - margin * 2) / graphW,
+        (svgH - margin * 2) / graphH
+      ));
+
+      // Center the content
+      initScale = fitScale;
+      initTx = (svgW - graphW * fitScale) / 2;
+      initTy = (svgH - graphH * fitScale) / 2;
+
+      scale = initScale;
+      tx = initTx;
+      ty = initTy;
+      applyTransform();
+    });
+  }
+})();
+</script>
+{% endblock %}
