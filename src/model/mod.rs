@@ -1,3 +1,5 @@
+//! Domain model types: [`Issue`], [`Status`], [`Priority`], [`Kind`], and related types.
+
 pub mod activity;
 pub mod comment;
 pub mod export;

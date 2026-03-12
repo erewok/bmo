@@ -4,9 +4,12 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 
+/// A single tracked work item.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Issue {
+    /// Auto-assigned numeric identifier.
     pub id: i64,
+    /// Parent issue id, if this is a sub-issue.
     pub parent_id: Option<i64>,
     pub title: String,
     pub description: String,
@@ -14,7 +17,9 @@ pub struct Issue {
     pub priority: Priority,
     pub kind: Kind,
     pub assignee: Option<String>,
+    /// Labels attached to this issue (by name).
     pub labels: Vec<String>,
+    /// File paths attached to this issue.
     pub files: Vec<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -28,14 +33,20 @@ impl Issue {
 
 // ── Status ────────────────────────────────────────────────────────────────────
 
+/// Workflow state of an issue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "kebab-case")]
 pub enum Status {
+    /// Not yet scheduled for active work.
     Backlog,
+    /// Scheduled and ready to start.
     Todo,
+    /// Currently being worked on.
     #[value(name = "in-progress")]
     InProgress,
+    /// Work complete, awaiting review.
     Review,
+    /// Closed and resolved.
     Done,
 }
 
@@ -93,13 +104,19 @@ impl FromStr for Status {
 
 // ── Priority ──────────────────────────────────────────────────────────────────
 
+/// Relative urgency of an issue. Variants are ordered from lowest to highest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "kebab-case")]
 pub enum Priority {
+    /// No priority assigned.
     None,
+    /// Low urgency.
     Low,
+    /// Normal urgency.
     Medium,
+    /// Elevated urgency.
     High,
+    /// Requires immediate attention.
     Critical,
 }
 
@@ -147,13 +164,19 @@ impl FromStr for Priority {
 
 // ── Kind ──────────────────────────────────────────────────────────────────────
 
+/// Classification of an issue by type of work.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "kebab-case")]
 pub enum Kind {
+    /// A defect or regression to fix.
     Bug,
+    /// New functionality to add.
     Feature,
+    /// A discrete unit of work.
     Task,
+    /// A large body of work spanning multiple issues.
     Epic,
+    /// Maintenance or non-functional work.
     Chore,
 }
 
@@ -201,6 +224,7 @@ impl FromStr for Kind {
 
 // ── IssueFilter ───────────────────────────────────────────────────────────────
 
+/// Parameters for filtering issue queries. All fields are optional; unset fields are ignored.
 #[derive(Debug, Default, Clone)]
 pub struct IssueFilter {
     pub status: Option<Vec<Status>>,

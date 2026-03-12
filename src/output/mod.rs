@@ -59,11 +59,13 @@ pub trait Printer {
 pub enum OutputMode {
     Human,
     Json,
+    Oneline,
 }
 
 pub fn make_printer(mode: OutputMode) -> Box<dyn Printer> {
     match mode {
         OutputMode::Human => Box::new(human::HumanPrinter::new()),
         OutputMode::Json => Box::new(json::JsonPrinter),
+        OutputMode::Oneline => Box::new(human::HumanPrinter::oneline()),
     }
 }

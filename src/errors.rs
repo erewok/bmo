@@ -1,5 +1,8 @@
+//! Error types used across the bmo library.
+
 use thiserror::Error;
 
+/// Top-level error type for bmo operations.
 #[allow(dead_code)]
 #[derive(Debug, Error)]
 pub enum BmoError {
@@ -15,12 +18,17 @@ pub enum BmoError {
     Io(#[from] std::io::Error),
 }
 
+/// Machine-readable category for a bmo error, used to select a CLI exit code.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 pub enum ErrorCode {
+    /// Uncategorized or internal error.
     General,
+    /// The requested resource does not exist.
     NotFound,
+    /// Input failed validation.
     Validation,
+    /// The operation conflicts with existing data.
     Conflict,
 }
 

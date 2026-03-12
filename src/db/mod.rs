@@ -1,3 +1,8 @@
+//! Database layer: the [`Repository`] trait and its SQLite-backed implementation.
+//!
+//! The primary entry points for callers are [`find_db`] to locate the database
+//! file and [`open_db`] to open a [`SqliteRepository`].
+
 pub mod schema;
 
 mod activity;
@@ -20,60 +25,121 @@ use crate::model::{
 
 // ── Repository trait ──────────────────────────────────────────────────────────
 
+/// Defines all database operations used by bmo.
+///
+/// The only provided implementation is [`SqliteRepository`]. The trait exists
+/// to allow alternative backends and test doubles.
 pub trait Repository {
     // Issues
+
+    /// Insert a new issue and return it with its assigned `id`.
     fn create_issue(&self, input: &CreateIssueInput) -> anyhow::Result<Issue>;
+
+    /// Fetch a single issue by `id`. Returns `None` if no such issue exists.
     fn get_issue(&self, id: i64) -> anyhow::Result<Option<Issue>>;
+
+    /// Return all issues matching `filter`, in priority-descending, id-ascending order.
     fn list_issues(&self, filter: &IssueFilter) -> anyhow::Result<Vec<Issue>>;
+
+    /// Return the count of issues matching `filter` without loading the rows.
     fn count_issues(&self, filter: &IssueFilter) -> anyhow::Result<i64>;
+
+    /// Apply `input` fields to the issue with `id` and return the updated issue.
     fn update_issue(&self, id: i64, input: &UpdateIssueInput) -> anyhow::Result<Issue>;
+
+    /// Permanently delete the issue with `id`.
     fn delete_issue(&self, id: i64) -> anyhow::Result<()>;
+
+    /// Return all direct children of `parent_id`.
     fn get_sub_issues(&self, parent_id: i64) -> anyhow::Result<Vec<Issue>>;
 
     // Comments
+
+    /// Append a comment to an issue and return the stored comment.
     fn add_comment(&self, input: &AddCommentInput) -> anyhow::Result<Comment>;
+
+    /// Return all comments for `issue_id` in ascending creation order.
     fn list_comments(&self, issue_id: i64) -> anyhow::Result<Vec<Comment>>;
 
     // Labels
+
+    /// Look up a label by `name`, creating it with the optional `color` if absent.
     fn get_or_create_label(&self, name: &str, color: Option<&str>) -> anyhow::Result<Label>;
+
+    /// Attach label `label_id` to issue `issue_id`.
     fn add_label_to_issue(&self, issue_id: i64, label_id: i64) -> anyhow::Result<()>;
+
+    /// Remove the label named `label_name` from issue `issue_id`.
     fn remove_label_from_issue(&self, issue_id: i64, label_name: &str) -> anyhow::Result<()>;
+
+    /// Return all labels attached to `issue_id`.
     fn list_issue_labels(&self, issue_id: i64) -> anyhow::Result<Vec<Label>>;
+
+    /// Return every label defined in the repository.
     fn list_all_labels(&self) -> anyhow::Result<Vec<Label>>;
+
+    /// Delete the label named `name` and remove it from all issues.
     fn delete_label(&self, name: &str) -> anyhow::Result<()>;
 
     // Relations
+
+    /// Create a directed relation of `kind` from `from_id` to `to_id`.
     fn add_relation(
         &self,
         from_id: i64,
         kind: RelationKind,
         to_id: i64,
     ) -> anyhow::Result<Relation>;
+
+    /// Delete the relation with `relation_id`.
     fn remove_relation(&self, relation_id: i64) -> anyhow::Result<()>;
+
+    /// Return all relations where `issue_id` appears as either endpoint.
     fn list_relations(&self, issue_id: i64) -> anyhow::Result<Vec<Relation>>;
+
+    /// Return every relation in the repository.
     fn list_all_relations(&self) -> anyhow::Result<Vec<Relation>>;
 
     // Activity
+
+    /// Append an activity log entry for an issue.
     fn log_activity(&self, entry: &NewActivityEntry) -> anyhow::Result<()>;
+
+    /// Return up to `limit` activity entries for `issue_id`, newest first.
     fn list_activity(&self, issue_id: i64, limit: usize) -> anyhow::Result<Vec<ActivityEntry>>;
 
     // Files
+
+    /// Attach a file path to an issue and return the stored record.
     fn add_file(&self, issue_id: i64, path: &str) -> anyhow::Result<IssueFile>;
+
+    /// Remove the file with `path` from `issue_id`.
     fn remove_file(&self, issue_id: i64, path: &str) -> anyhow::Result<()>;
+
+    /// Return all files attached to `issue_id`.
     fn list_files(&self, issue_id: i64) -> anyhow::Result<Vec<IssueFile>>;
 
     // Meta
+
+    /// Retrieve the string value stored under `key`, if any.
     fn get_meta(&self, key: &str) -> anyhow::Result<Option<String>>;
+
+    /// Store `value` under `key`, replacing any existing value.
     fn set_meta(&self, key: &str, value: &str) -> anyhow::Result<()>;
 
     // Stats
+
+    /// Return aggregate counts of issues grouped by status, priority, and kind.
     fn get_stats(&self) -> anyhow::Result<Stats>;
+
+    /// Return `(total_issue_count, timestamp_of_last_update)` for SSE change detection.
     fn board_snapshot_stats(&self) -> anyhow::Result<(i64, Option<chrono::DateTime<chrono::Utc>>)>;
 
     // Board
+
     /// Fetch issues for all board columns, running one query per status (5 queries total).
     ///
-    /// Returns a map of Status -> Vec<Issue>, where each vec contains at most
+    /// Returns a map of `Status` -> `Vec<Issue>`, where each vec contains at most
     /// `limit_per_status` issues ordered by priority DESC, id ASC.  All five
     /// canonical statuses (backlog, todo, in_progress, review, done) are always
     /// present as keys, even if the corresponding vec is empty.
@@ -85,6 +151,7 @@ pub trait Repository {
 
 // ── Input types ───────────────────────────────────────────────────────────────
 
+/// Input for creating a new issue.
 #[derive(Debug)]
 pub struct CreateIssueInput {
     pub parent_id: Option<i64>,
@@ -99,6 +166,7 @@ pub struct CreateIssueInput {
     pub actor: Option<String>,
 }
 
+/// Input for a partial update to an existing issue. `None` fields are left unchanged.
 #[derive(Debug, Default)]
 pub struct UpdateIssueInput {
     pub title: Option<String>,
@@ -111,6 +179,7 @@ pub struct UpdateIssueInput {
     pub actor: Option<String>,
 }
 
+/// Input for adding a comment to an issue.
 #[derive(Debug)]
 pub struct AddCommentInput {
     pub issue_id: i64,
@@ -120,6 +189,7 @@ pub struct AddCommentInput {
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 
+/// Aggregate issue counts returned by [`Repository::get_stats`].
 #[derive(Debug, Default, serde::Serialize)]
 pub struct Stats {
     pub total: u64,
@@ -130,11 +200,13 @@ pub struct Stats {
 
 // ── SqliteRepository ──────────────────────────────────────────────────────────
 
+/// SQLite-backed implementation of [`Repository`].
 pub struct SqliteRepository {
     pub(crate) conn: Connection,
 }
 
 impl SqliteRepository {
+    /// Open the database at `path`. The schema is not initialized; call [`open_db`] instead.
     pub fn open(path: &Path) -> anyhow::Result<Self> {
         let conn = Connection::open(path)?;
         conn.execute_batch("PRAGMA journal_mode = WAL;")?;
@@ -144,6 +216,7 @@ impl SqliteRepository {
         Ok(Self { conn })
     }
 
+    /// Open an in-memory SQLite database with the schema pre-initialized. Intended for tests.
     pub fn open_in_memory() -> anyhow::Result<Self> {
         let conn = Connection::open_in_memory()?;
         schema::initialize(&conn)?;

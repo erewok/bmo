@@ -1,6 +1,6 @@
 [package]
 name = "bmo"
-version = "0.2.3"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.91.0"
 description = "Local-first SQLite-backed CLI issue tracker for AI agents"
@@ -12,6 +12,10 @@ readme = "README.md"
 keywords = ["cli", "issues", "tracker", "sqlite", "ai"]
 categories = ["command-line-utilities", "development-tools"]
 authors = ["Erik Aker <eraker@gmail.com>"]
+
+[package.metadata.docs.rs]
+all-features = false
+rustdoc-args = ["--cfg", "docsrs"]
 
 [[bin]]
 name = "bmo"
