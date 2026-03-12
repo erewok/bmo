@@ -44,3 +44,5 @@ ammonia         = "4"
 assert_cmd = "2.2.0"
 predicates = "3"
 tempfile   = "3.27.0"
+tower      = { version = "0.5", features = ["util"] }
+http       = "1"

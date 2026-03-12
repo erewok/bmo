@@ -22,7 +22,7 @@ fn main() {
     let cli = Cli::parse();
     let json = cli.json;
 
-    let result = dispatch(cli.command, json);
+    let result = dispatch(cli.command, json, cli.db);
 
     if let Err(e) = result {
         if json {
@@ -40,7 +40,7 @@ fn main() {
     }
 }
 
-fn dispatch(command: Commands, json: bool) -> anyhow::Result<()> {
+fn dispatch(command: Commands, json: bool, db: Option<String>) -> anyhow::Result<()> {
     match command {
         Commands::Init(args) => cli::init::run(&args, json),
         Commands::Config(args) => cli::config::run(&args, json),
@@ -51,7 +51,7 @@ fn dispatch(command: Commands, json: bool) -> anyhow::Result<()> {
         Commands::Board(args) => cli::board::run(&args, json),
         Commands::Next(args) => cli::next::run(&args, json),
         Commands::Plan(args) => cli::plan::run(&args, json),
-        Commands::Web(args) => cli::web::run(&args, json),
+        Commands::Web(args) => cli::web::run(&args, json, db),
         Commands::Issue(sub) => dispatch_issue(sub, json),
     }
 }
