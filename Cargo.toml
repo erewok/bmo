@@ -1,8 +1,8 @@
 [package]
 name = "bmo"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.91.0"
 description = "Local-first SQLite-backed CLI issue tracker for AI agents"
 license = "Apache-2.0"
 repository = "https://github.com/erewok/bmo"
@@ -27,13 +27,13 @@ chrono       = { version = "0.4", features = ["serde"] }
 clap         = { version = "4.5.60", features = ["derive", "env"] }
 comfy-table  = "7"
 owo-colors   = "4"
-rusqlite     = { version = "0.31", features = ["bundled"] }
+rusqlite     = { version = "0.38.0", features = ["bundled", "fallible_uint"] }
 serde        = { version = "1.0.228", features = ["derive"] }
 serde_json   = "1.0.149"
 thiserror    = "2.0.18"
-toml         = "0.8"
-tokio        = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
-axum         = "0.7"
+toml         = "0.9.8"
+tokio        = { version = "1.50.0", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
+axum         = "0.8.8"
 async-stream = "0.3"
 futures-util = { version = "0.3", default-features = false }
 minijinja       = "2"
@@ -41,6 +41,6 @@ pulldown-cmark  = { version = "0.13", default-features = false, features = ["htm
 ammonia         = "4"
 
 [dev-dependencies]
-assert_cmd = "2"
+assert_cmd = "2.2.0"
 predicates = "3"
-tempfile   = "3"
+tempfile   = "3.27.0"
