@@ -24,6 +24,52 @@ pub struct AppState {
     pub events_tx: tokio::sync::broadcast::Sender<String>,
 }
 
+pub fn build_router(state: AppState) -> Router {
+    Router::new()
+        .route("/favicon.ico", get(handlers::favicon))
+        .route("/logo.png", get(handlers::logo))
+        .route("/", get(|| async { Redirect::permanent("/board") }))
+        .route("/board", get(handlers::board_page))
+        .route("/issues", get(handlers::issue_list_page))
+        .route("/issues/{id}", get(handlers::issue_detail_page))
+        .route("/graph", get(handlers::graph_page))
+        .route("/api/issues", get(handlers::api_issue_list))
+        .route("/api/issues/{id}", get(handlers::api_issue_detail))
+        .route(
+            "/api/issues/{id}/comments",
+            post(handlers::api_post_comment),
+        )
+        .route("/api/graph", get(handlers::api_graph))
+        .route("/api/board", get(handlers::api_board))
+        .route("/api/stats", get(handlers::api_stats))
+        .route("/api/events", get(handlers::api_events))
+        .with_state(state)
+}
+
+/// Construct an `AppState` backed by the given SQLite path, suitable for use
+/// in integration tests. No TCP listener is bound; no background SSE poller
+/// is started.
+///
+/// Returns `(AppState, watch::Sender<bool>)`. The caller must hold the sender
+/// for the lifetime of the test — dropping it closes the watch channel, which
+/// causes routes that select on `shutdown.changed()` (e.g. the SSE handler)
+/// to terminate as if shutdown had been signalled.
+#[doc(hidden)]
+pub fn test_state(db_path: PathBuf) -> (AppState, tokio::sync::watch::Sender<bool>) {
+    let env = Arc::new(templates::make_env());
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+    let (events_tx, _events_rx) = tokio::sync::broadcast::channel(SSE_BROADCAST_CAPACITY);
+    (
+        AppState {
+            db_path,
+            env,
+            shutdown: shutdown_rx,
+            events_tx,
+        },
+        shutdown_tx,
+    )
+}
+
 pub async fn start_server(host: &str, port: u16, db_path: PathBuf) -> anyhow::Result<()> {
     let env = Arc::new(templates::make_env());
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
@@ -102,22 +148,7 @@ pub async fn start_server(host: &str, port: u16, db_path: PathBuf) -> anyhow::Re
         events_tx,
     };
 
-    let app = Router::new()
-        .route("/favicon.ico", get(handlers::favicon))
-        .route("/logo.png", get(handlers::logo))
-        .route("/", get(|| async { Redirect::permanent("/board") }))
-        .route("/board", get(handlers::board_page))
-        .route("/issues", get(handlers::issue_list_page))
-        .route("/issues/:id", get(handlers::issue_detail_page))
-        .route("/graph", get(handlers::graph_page))
-        .route("/api/issues", get(handlers::api_issue_list))
-        .route("/api/issues/:id", get(handlers::api_issue_detail))
-        .route("/api/issues/:id/comments", post(handlers::api_post_comment))
-        .route("/api/graph", get(handlers::api_graph))
-        .route("/api/board", get(handlers::api_board))
-        .route("/api/stats", get(handlers::api_stats))
-        .route("/api/events", get(handlers::api_events))
-        .with_state(state);
+    let app = build_router(state);
 
     let addr = format!("{host}:{port}");
     let listener = tokio::net::TcpListener::bind(&addr).await?;

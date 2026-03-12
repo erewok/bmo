@@ -198,7 +198,7 @@ checksum = "843867be96c8daad0d758b57df9392b6d8d271134fce549de6ce169ff98a92af"
 
 [[package]]
 name = "bmo"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "ammonia",
  "anyhow",
@@ -209,6 +209,7 @@ dependencies = [
  "clap",
  "comfy-table",
  "futures-util",
+ "http",
  "minijinja",
  "owo-colors",
  "predicates",
@@ -220,6 +221,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "toml",
+ "tower",
 ]
 
 [[package]]

@@ -15,9 +15,12 @@ pub struct WebArgs {
     pub no_open: bool,
 }
 
-pub fn run(args: &WebArgs, _json: bool) -> anyhow::Result<()> {
-    let bmo_dir = find_bmo_dir()?;
-    let db_path = bmo_dir.join("issues.db");
+pub fn run(args: &WebArgs, _json: bool, db: Option<String>) -> anyhow::Result<()> {
+    let db_path = if let Some(path) = db {
+        std::path::PathBuf::from(path)
+    } else {
+        find_bmo_dir()?.join("issues.db")
+    };
     let url = format!("http://{}:{}", args.host, args.port);
 
     if !args.no_open {
