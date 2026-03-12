@@ -150,11 +150,17 @@ fn kind_colored(kind: Kind) -> String {
     }
 }
 
-pub struct HumanPrinter;
+pub struct HumanPrinter {
+    oneline: bool,
+}
 
 impl HumanPrinter {
     pub fn new() -> Self {
-        HumanPrinter
+        HumanPrinter { oneline: false }
+    }
+
+    pub fn oneline() -> Self {
+        HumanPrinter { oneline: true }
     }
 }
 
@@ -181,6 +187,24 @@ impl Printer for HumanPrinter {
     fn print_issue_list(&self, issues: &[Issue]) {
         if issues.is_empty() {
             println!("No issues found.");
+            return;
+        }
+        if self.oneline {
+            for issue in issues {
+                let id = if no_color() {
+                    issue.display_id().to_string()
+                } else {
+                    issue.display_id().bold().to_string()
+                };
+                println!(
+                    "{}  {}  {}  {}  {}",
+                    id,
+                    status_colored(issue.status),
+                    priority_colored(issue.priority),
+                    kind_colored(issue.kind),
+                    issue.title,
+                );
+            }
             return;
         }
         let mut table = make_table(&["ID", "Status", "Priority", "Kind", "Title", "Assignee"]);

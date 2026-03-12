@@ -1,3 +1,9 @@
+//! Axum-based web server for the bmo board UI and REST API.
+//!
+//! The primary entry point is [`start_server`]. [`build_router`] is exposed
+//! separately to allow integration tests to mount the router without binding
+//! a TCP port.
+
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -70,6 +76,12 @@ pub fn test_state(db_path: PathBuf) -> (AppState, tokio::sync::watch::Sender<boo
     )
 }
 
+/// Start the bmo web server and block until Ctrl+C is received.
+///
+/// Binds a TCP listener on `host:port`, initializes the Axum router with
+/// `db_path` as the backing store, and spawns a background SSE poller that
+/// broadcasts board-change events every 3 seconds. Graceful shutdown is
+/// triggered by a SIGINT (Ctrl+C) signal.
 pub async fn start_server(host: &str, port: u16, db_path: PathBuf) -> anyhow::Result<()> {
     let env = Arc::new(templates::make_env());
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);

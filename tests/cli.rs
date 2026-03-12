@@ -174,6 +174,48 @@ fn close_and_reopen_issue() {
     assert_eq!(json["data"]["issue"]["status"], "todo");
 }
 
+// ── Issue list --oneline ──────────────────────────────────────────────────────
+
+#[test]
+fn issue_list_oneline() {
+    let dir = setup();
+    bmo(&dir)
+        .args(["issue", "create", "--title", "Oneline test issue"])
+        .assert()
+        .success();
+
+    // --oneline produces a single line containing the ID and title
+    let output = bmo(&dir)
+        .args(["issue", "list", "--oneline"])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success());
+    assert!(stdout.contains("BMO-1"));
+    assert!(stdout.contains("Oneline test issue"));
+    // One line per issue — no table borders or padding
+    assert!(!stdout.contains("─"));
+}
+
+#[test]
+fn issue_list_oneline_json_takes_precedence() {
+    let dir = setup();
+    bmo(&dir)
+        .args(["issue", "create", "--title", "JSON wins"])
+        .assert()
+        .success();
+
+    // --json beats --oneline: output must be valid JSON with the envelope
+    let output = bmo(&dir)
+        .args(["issue", "list", "--oneline", "--json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["ok"], true);
+    assert!(json["data"].is_array());
+}
+
 // ── Board ─────────────────────────────────────────────────────────────────────
 
 #[test]

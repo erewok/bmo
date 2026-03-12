@@ -354,6 +354,7 @@ Alias: `bmo issue ls`
 | `--limit <n>` | integer | 50 | Maximum number of results |
 | `--sort <field>` | string | (none) | Sort field |
 | `--all` | bool | false | Include done issues |
+| `--oneline` | bool | false | Print one compact line per issue (ID, status, priority, kind, title) |
 
 **Examples:**
 

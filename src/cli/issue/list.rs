@@ -37,6 +37,9 @@ pub struct ListArgs {
     /// Include done issues
     #[arg(long)]
     pub all: bool,
+    /// Compact one-line-per-issue output
+    #[arg(long)]
+    pub oneline: bool,
 }
 
 pub fn run(args: &ListArgs, json: bool) -> anyhow::Result<()> {
@@ -44,6 +47,8 @@ pub fn run(args: &ListArgs, json: bool) -> anyhow::Result<()> {
     let repo = open_db(&bmo_dir.join("issues.db"))?;
     let printer = make_printer(if json {
         OutputMode::Json
+    } else if args.oneline {
+        OutputMode::Oneline
     } else {
         OutputMode::Human
     });
