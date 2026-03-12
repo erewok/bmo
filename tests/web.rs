@@ -10,16 +10,17 @@ use bmo::web::{build_router, test_state};
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /// Create a temp directory, initialize a SQLite DB inside it, build the Axum
-/// router, and return both. The caller must hold onto `TempDir` for the
-/// lifetime of the test so the DB file is not deleted while the router runs.
-fn setup_app() -> (axum::Router, TempDir) {
+/// router, and return all three guards. The caller must hold `TempDir` so the
+/// DB file is not deleted, and must hold the `watch::Sender` so the shutdown
+/// channel stays open (dropping it would terminate SSE streams immediately).
+fn setup_app() -> (axum::Router, TempDir, tokio::sync::watch::Sender<bool>) {
     let dir = TempDir::new().unwrap();
     let db_path = dir.path().join("issues.db");
     // open_db runs schema initialization
     open_db(&db_path).unwrap();
-    let state = test_state(db_path);
+    let (state, shutdown_guard) = test_state(db_path);
     let router = build_router(state);
-    (router, dir)
+    (router, dir, shutdown_guard)
 }
 
 /// Seed one issue in the DB and return its id.
@@ -47,7 +48,7 @@ fn create_test_issue(dir: &TempDir) -> i64 {
 
 #[tokio::test]
 async fn api_issues_empty() {
-    let (app, _dir) = setup_app();
+    let (app, _dir, _shutdown) = setup_app();
 
     let response = app
         .oneshot(
@@ -72,7 +73,7 @@ async fn api_issues_empty() {
 
 #[tokio::test]
 async fn api_issue_detail_found() {
-    let (app, dir) = setup_app();
+    let (app, dir, _shutdown) = setup_app();
     let id = create_test_issue(&dir);
 
     let response = app
@@ -97,7 +98,7 @@ async fn api_issue_detail_found() {
 
 #[tokio::test]
 async fn api_issue_detail_not_found() {
-    let (app, _dir) = setup_app();
+    let (app, _dir, _shutdown) = setup_app();
 
     let response = app
         .oneshot(
@@ -120,7 +121,7 @@ async fn api_issue_detail_not_found() {
 
 #[tokio::test]
 async fn api_post_comment_success() {
-    let (app, dir) = setup_app();
+    let (app, dir, _shutdown) = setup_app();
     let id = create_test_issue(&dir);
 
     let response = app
@@ -146,7 +147,7 @@ async fn api_post_comment_success() {
 
 #[tokio::test]
 async fn api_post_comment_empty_body() {
-    let (app, dir) = setup_app();
+    let (app, dir, _shutdown) = setup_app();
     let id = create_test_issue(&dir);
 
     let response = app
@@ -172,7 +173,7 @@ async fn api_post_comment_empty_body() {
 
 #[tokio::test]
 async fn api_stats_ok() {
-    let (app, _dir) = setup_app();
+    let (app, _dir, _shutdown) = setup_app();
 
     let response = app
         .oneshot(
@@ -195,7 +196,7 @@ async fn api_stats_ok() {
 
 #[tokio::test]
 async fn board_page_renders() {
-    let (app, _dir) = setup_app();
+    let (app, _dir, _shutdown) = setup_app();
 
     let response = app
         .oneshot(

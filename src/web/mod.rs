@@ -48,19 +48,26 @@ pub fn build_router(state: AppState) -> Router {
 
 /// Construct an `AppState` backed by the given SQLite path, suitable for use
 /// in integration tests. No TCP listener is bound; no background SSE poller
-/// is started. The watch channel sender is dropped immediately since tests do
-/// not need graceful shutdown signalling.
+/// is started.
+///
+/// Returns `(AppState, watch::Sender<bool>)`. The caller must hold the sender
+/// for the lifetime of the test — dropping it closes the watch channel, which
+/// causes routes that select on `shutdown.changed()` (e.g. the SSE handler)
+/// to terminate as if shutdown had been signalled.
 #[doc(hidden)]
-pub fn test_state(db_path: PathBuf) -> AppState {
+pub fn test_state(db_path: PathBuf) -> (AppState, tokio::sync::watch::Sender<bool>) {
     let env = Arc::new(templates::make_env());
-    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
     let (events_tx, _events_rx) = tokio::sync::broadcast::channel(SSE_BROADCAST_CAPACITY);
-    AppState {
-        db_path,
-        env,
-        shutdown: shutdown_rx,
-        events_tx,
-    }
+    (
+        AppState {
+            db_path,
+            env,
+            shutdown: shutdown_rx,
+            events_tx,
+        },
+        shutdown_tx,
+    )
 }
 
 pub async fn start_server(host: &str, port: u16, db_path: PathBuf) -> anyhow::Result<()> {
