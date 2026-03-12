@@ -369,17 +369,36 @@
   fetchIssues(0, false);
 
   // Subscribe to SSE board_updated events — re-fetch the list on each change.
-  (function connectSSE() {
+  var sseReconnecting = false;
+
+  function connectSSE() {
+    sseReconnecting = false;
     var es = new EventSource('/api/events');
 
     es.addEventListener('board_updated', function () {
       resetAndFetch();
     });
 
-    es.onerror = function (err) {
-      console.warn('bmo SSE error on issue list; will retry automatically', err);
+    es.onopen = function () {
+      console.info('bmo SSE connected on issue list');
     };
-  })();
+
+    es.onerror = function (err) {
+      console.warn('bmo SSE error on issue list', err);
+      if (es.readyState === EventSource.CLOSED && !sseReconnecting) {
+        sseReconnecting = true;
+        console.warn('bmo SSE closed on issue list; reconnecting...');
+        try {
+          es.close();
+        } catch (e) {
+          // ignore close errors
+        }
+        setTimeout(connectSSE, 1000);
+      }
+    };
+  }
+
+  connectSSE();
 })();
 </script>
 {% endblock %}

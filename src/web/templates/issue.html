@@ -233,8 +233,17 @@
     }
 
     // Subscribe to SSE board_updated events — refresh status on each change.
-    (function connectSSE() {
+    // Named function so onerror can schedule a reconnect on permanent closure.
+    var sseReconnecting = false;
+
+    function connectSSE() {
+      sseReconnecting = false;
       var es = new EventSource('/api/events');
+
+      es.addEventListener('open', function () {
+        // Ensure status is in sync whenever the SSE connection (re)opens.
+        refreshStatus();
+      });
 
       es.addEventListener('board_updated', function () {
         refreshStatus();
@@ -242,8 +251,16 @@
 
       es.onerror = function (err) {
         console.warn('bmo SSE error on issue detail; will retry automatically', err);
+        // If the EventSource has been permanently closed, attempt to reconnect.
+        // Guard against multiple onerror firings scheduling duplicate reconnects.
+        if (es.readyState === EventSource.CLOSED && !sseReconnecting) {
+          sseReconnecting = true;
+          setTimeout(connectSSE, 5000);
+        }
       };
-    })();
+    }
+
+    connectSSE();
   })();
 </script>
 {% endblock %}

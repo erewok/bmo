@@ -52,13 +52,30 @@ pub async fn start_server(host: &str, port: u16, db_path: PathBuf) -> anyhow::Re
                     _ = shutdown_bg.changed() => { break; }
                 }
 
+                // If there are no SSE subscribers, skip the DB snapshot poll to avoid
+                // unnecessary work. Note: last_snapshot is not updated while skipping,
+                // so when the first subscriber connects, the poller will detect any
+                // changes that happened offline and emit a catch-up board_updated event.
+                if events_tx_bg.receiver_count() == 0 {
+                    continue;
+                }
+
                 let db_path_poll = db_path_bg.clone();
-                let current_snapshot =
+                let snapshot_result =
                     tokio::task::spawn_blocking(move || handlers::board_snapshot(&db_path_poll))
-                        .await
-                        .ok()
-                        .and_then(|r| r.ok())
-                        .unwrap_or_default();
+                        .await;
+
+                let current_snapshot = match snapshot_result {
+                    Ok(Ok(s)) => s,
+                    Ok(Err(e)) => {
+                        eprintln!("bmo SSE poller: board_snapshot error, skipping: {e}");
+                        continue;
+                    }
+                    Err(e) => {
+                        eprintln!("bmo SSE poller: spawn_blocking error, skipping: {e}");
+                        continue;
+                    }
+                };
 
                 if current_snapshot != last_snapshot {
                     last_snapshot = current_snapshot;
