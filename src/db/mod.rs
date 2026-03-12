@@ -71,7 +71,7 @@ pub trait Repository {
     fn board_snapshot_stats(&self) -> anyhow::Result<(i64, Option<chrono::DateTime<chrono::Utc>>)>;
 
     // Board
-    /// Fetch issues for all board columns in a single DB round-trip.
+    /// Fetch issues for all board columns, running one query per status (5 queries total).
     ///
     /// Returns a map of Status -> Vec<Issue>, where each vec contains at most
     /// `limit_per_status` issues ordered by priority DESC, id ASC.  All five

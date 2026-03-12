@@ -128,7 +128,7 @@
 <script>
   (function () {
     const ISSUE_ID = {{ issue.id }};
-    const INITIAL_STATUS = "{{ issue.status }}"; // safe: server-controlled enum, only [a-z_] chars
+    const INITIAL_STATUS = "{{ issue.status }}"; // safe: server-controlled enum, kebab-case values only (e.g. "in-progress")
 
     const warningBanner = document.getElementById('in-progress-warning');
     const errorDiv = document.getElementById('comment-error');
@@ -214,8 +214,8 @@
       }
     });
 
-    // Poll for status changes every 5 seconds
-    async function pollStatus() {
+    // Fetch the current status from the API and update the badge if it changed.
+    async function refreshStatus() {
       try {
         const response = await fetch('/api/issues/' + ISSUE_ID);
         if (response.ok) {
@@ -228,11 +228,39 @@
           }
         }
       } catch (_) {
-        // Silently ignore poll errors
+        // Silently ignore fetch errors
       }
     }
 
-    setInterval(pollStatus, 5000);
+    // Subscribe to SSE board_updated events — refresh status on each change.
+    // Named function so onerror can schedule a reconnect on permanent closure.
+    var sseReconnecting = false;
+
+    function connectSSE() {
+      sseReconnecting = false;
+      var es = new EventSource('/api/events');
+
+      es.addEventListener('open', function () {
+        // Ensure status is in sync whenever the SSE connection (re)opens.
+        refreshStatus();
+      });
+
+      es.addEventListener('board_updated', function () {
+        refreshStatus();
+      });
+
+      es.onerror = function (err) {
+        console.warn('bmo SSE error on issue detail; will retry automatically', err);
+        // If the EventSource has been permanently closed, attempt to reconnect.
+        // Guard against multiple onerror firings scheduling duplicate reconnects.
+        if (es.readyState === EventSource.CLOSED && !sseReconnecting) {
+          sseReconnecting = true;
+          setTimeout(connectSSE, 5000);
+        }
+      };
+    }
+
+    connectSSE();
   })();
 </script>
 {% endblock %}

@@ -386,8 +386,23 @@
       }
     }
 
-    // Compute in-degrees for layout edges only (blocks / depends-on define rank)
-    const layoutEdges = edges.filter(e => e.kind === 'blocks' || e.kind === 'depends-on');
+    // Compute in-degrees for layout edges only (blocks / depends-on define rank).
+    // Normalize inverse relations before rank computation:
+    //   blocked-by A→B   means B blocks A   → treat as blocks    from B to A
+    //   dependency-of A→B means B depends-on A → treat as depends-on from B to A
+    const layoutEdges = [];
+    for (const e of edges) {
+      if (e.kind === 'blocks' || e.kind === 'depends-on') {
+        layoutEdges.push({ from: e.from, to: e.to });
+      } else if (e.kind === 'blocked-by') {
+        // swap: B blocks A
+        layoutEdges.push({ from: e.to, to: e.from });
+      } else if (e.kind === 'dependency-of') {
+        // swap: B depends-on A
+        layoutEdges.push({ from: e.to, to: e.from });
+      }
+    }
+
     const inDegree = new Map(nodes.map(n => [n.id, 0]));
     const outAdj = new Map(nodes.map(n => [n.id, []]));
 

@@ -57,31 +57,34 @@ pub async fn board_page(State(state): State<AppState>) -> impl IntoResponse {
     let result = tokio::task::spawn_blocking(move || {
         let repo = open_db(&state.db_path)?;
 
-        // Fetch all board columns in a single DB round-trip, then build the
-        // ordered column list for the template.
+        // Fetch all board columns — one query per status (5 total) — then
+        // build the ordered column list for the template.
         let by_status = repo.list_issues_by_status(DEFAULT_LIMIT)?;
 
-        let col_defs: &[(Status, &str)] = &[
-            (Status::Backlog, "Backlog"),
-            (Status::Todo, "Todo"),
-            (Status::InProgress, "In Progress"),
-            (Status::Review, "Review"),
-            (Status::Done, "Done"),
+        let col_defs: &[(&str, &str, Status)] = &[
+            ("backlog", "Backlog", Status::Backlog),
+            ("todo", "Todo", Status::Todo),
+            ("in_progress", "In Progress", Status::InProgress),
+            ("review", "Review", Status::Review),
+            ("done", "Done", Status::Done),
         ];
 
         let columns: Vec<serde_json::Value> = col_defs
             .iter()
-            .map(|(status, label)| -> anyhow::Result<serde_json::Value> {
-                let col_issues_raw = by_status.get(status).map(Vec::as_slice).unwrap_or(&[]);
-                let col_issues: Vec<serde_json::Value> = col_issues_raw
-                    .iter()
-                    .map(|i| serde_json::to_value(i).map_err(|e| anyhow::anyhow!(e)))
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok(serde_json::json!({
-                    "label": label,
-                    "issues": col_issues,
-                }))
-            })
+            .map(
+                |(col_key, label, status)| -> anyhow::Result<serde_json::Value> {
+                    let col_issues_raw = by_status.get(status).map(Vec::as_slice).unwrap_or(&[]);
+                    let col_issues: Vec<serde_json::Value> = col_issues_raw
+                        .iter()
+                        .map(|i| serde_json::to_value(i).map_err(|e| anyhow::anyhow!(e)))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    Ok(serde_json::json!({
+                        "status": col_key,
+                        "label": label,
+                        "issues": col_issues,
+                    }))
+                },
+            )
             .collect::<Result<Vec<_>, _>>()?;
 
         let tmpl = state.env.get_template("board.html")?;
@@ -107,20 +110,8 @@ pub async fn board_page(State(state): State<AppState>) -> impl IntoResponse {
 
 pub async fn issue_list_page(State(state): State<AppState>) -> impl IntoResponse {
     let result = tokio::task::spawn_blocking(move || {
-        let repo = open_db(&state.db_path)?;
-        let issues = repo.list_issues(&IssueFilter {
-            include_done: true,
-            limit: Some(DEFAULT_LIMIT),
-            offset: Some(0),
-            ..Default::default()
-        })?;
-        let issues_json: Vec<serde_json::Value> = issues
-            .iter()
-            .map(|i| serde_json::to_value(i).map_err(|e| anyhow::anyhow!(e)))
-            .collect::<Result<Vec<_>, _>>()?;
-
         let tmpl = state.env.get_template("issue_list.html")?;
-        let html = tmpl.render(context!(issues => issues_json))?;
+        let html = tmpl.render(context!())?;
         anyhow::Ok(html)
     })
     .await;
@@ -312,7 +303,7 @@ pub async fn api_board(
         let repo = open_db(&state.db_path)?;
         let per_column_limit = params.limit.unwrap_or(DEFAULT_LIMIT);
 
-        // Fetch all board columns in a single DB round-trip.
+        // Fetch all board columns — one query per status (5 total).
         let by_status = repo.list_issues_by_status(per_column_limit)?;
 
         let col_defs: &[(&str, &str, Status)] = &[
@@ -479,51 +470,42 @@ pub async fn api_post_comment(
 
 /// SSE stream that emits a `board_updated` event whenever the board changes.
 ///
-/// Polls the database every 3 seconds, comparing the maximum `updated_at`
-/// timestamp across all issues. Emits an event when a change is detected.
-/// Clients reconnect automatically via the native EventSource protocol.
+/// Subscribes to the shared [`AppState::events_tx`] broadcast channel, which is
+/// fed by a single background poller in [`super`].  This avoids opening the DB
+/// once per connected client per tick — all clients share the same 3-second
+/// poll.
+///
+/// If the subscriber's channel buffer overflows (i.e. a client is very slow),
+/// `RecvError::Lagged` is returned; we log a warning and continue rather than
+/// dropping the connection.
 pub async fn api_events(
     State(state): State<AppState>,
 ) -> Sse<impl stream::Stream<Item = Result<Event, std::convert::Infallible>>> {
-    // Seed the initial snapshot so we only emit events on actual changes.
-    let initial_snapshot = {
-        let db_path = state.db_path.clone();
-        tokio::task::spawn_blocking(move || board_snapshot(&db_path))
-            .await
-            .ok()
-            .and_then(|r| r.ok())
-            .unwrap_or_default()
-    };
-
+    let mut rx = state.events_tx.subscribe();
     let mut shutdown = state.shutdown.clone();
 
     let sse_stream = async_stream::stream! {
-        let mut last_snapshot = initial_snapshot;
         loop {
             tokio::select! {
-                _ = tokio::time::sleep(tokio::time::Duration::from_secs(3)) => {}
+                result = rx.recv() => {
+                    match result {
+                        Ok(data) => {
+                            yield Ok::<Event, std::convert::Infallible>(
+                                Event::default().event("board_updated").data(data)
+                            );
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                            eprintln!("bmo SSE: subscriber lagged, skipped {n} message(s)");
+                            // Continue — don't drop the connection.
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                            // Broadcaster shut down; end the stream.
+                            break;
+                        }
+                    }
+                }
                 _ = shutdown.changed() => { break; }
             }
-
-            let db_path = state.db_path.clone();
-            let current_snapshot =
-                tokio::task::spawn_blocking(move || board_snapshot(&db_path))
-                    .await
-                    .ok()
-                    .and_then(|r| r.ok())
-                    .unwrap_or_default();
-
-            if current_snapshot != last_snapshot {
-                let timestamp = chrono::Utc::now().to_rfc3339();
-                let data = serde_json::json!({
-                    "type": "board_updated",
-                    "timestamp": timestamp,
-                })
-                .to_string();
-                last_snapshot = current_snapshot;
-                yield Ok::<Event, std::convert::Infallible>(Event::default().event("board_updated").data(data));
-            }
-            // No change — emit nothing; axum KeepAlive handles TCP keepalive.
         }
     };
 
@@ -674,7 +656,9 @@ pub async fn api_graph(State(state): State<AppState>) -> impl IntoResponse {
 ///
 /// Uses the maximum `updated_at` timestamp combined with the total issue count
 /// so that both edits and additions/deletions are detected.
-fn board_snapshot(db_path: &std::path::Path) -> anyhow::Result<String> {
+///
+/// Public so that the background broadcaster in [`super`] can call it.
+pub fn board_snapshot(db_path: &std::path::Path) -> anyhow::Result<String> {
     let repo = open_db(db_path)?;
     let (count, max_updated) = repo.board_snapshot_stats()?;
     let max_updated_str = max_updated.map(|t| t.to_rfc3339()).unwrap_or_default();
