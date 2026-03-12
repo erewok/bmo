@@ -108,11 +108,14 @@ pub async fn start_server(host: &str, port: u16, db_path: PathBuf) -> anyhow::Re
         .route("/", get(|| async { Redirect::permanent("/board") }))
         .route("/board", get(handlers::board_page))
         .route("/issues", get(handlers::issue_list_page))
-        .route("/issues/:id", get(handlers::issue_detail_page))
+        .route("/issues/{id}", get(handlers::issue_detail_page))
         .route("/graph", get(handlers::graph_page))
         .route("/api/issues", get(handlers::api_issue_list))
-        .route("/api/issues/:id", get(handlers::api_issue_detail))
-        .route("/api/issues/:id/comments", post(handlers::api_post_comment))
+        .route("/api/issues/{id}", get(handlers::api_issue_detail))
+        .route(
+            "/api/issues/{id}/comments",
+            post(handlers::api_post_comment),
+        )
         .route("/api/graph", get(handlers::api_graph))
         .route("/api/board", get(handlers::api_board))
         .route("/api/stats", get(handlers::api_stats))

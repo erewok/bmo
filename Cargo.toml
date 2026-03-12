@@ -1,6 +1,6 @@
 [package]
 name = "bmo"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2024"
 rust-version = "1.91.0"
 description = "Local-first SQLite-backed CLI issue tracker for AI agents"
