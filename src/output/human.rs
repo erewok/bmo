@@ -191,25 +191,19 @@ impl Printer for HumanPrinter {
         }
         if self.oneline {
             for issue in issues {
-                if no_color() {
-                    println!(
-                        "{}  {}  {}  {}  {}",
-                        issue.display_id(),
-                        status_colored(issue.status),
-                        priority_colored(issue.priority),
-                        kind_colored(issue.kind),
-                        issue.title,
-                    );
+                let id = if no_color() {
+                    issue.display_id().to_string()
                 } else {
-                    println!(
-                        "{}  {}  {}  {}  {}",
-                        issue.display_id().bold(),
-                        status_colored(issue.status),
-                        priority_colored(issue.priority),
-                        kind_colored(issue.kind),
-                        issue.title,
-                    );
-                }
+                    issue.display_id().bold().to_string()
+                };
+                println!(
+                    "{}  {}  {}  {}  {}",
+                    id,
+                    status_colored(issue.status),
+                    priority_colored(issue.priority),
+                    kind_colored(issue.kind),
+                    issue.title,
+                );
             }
             return;
         }

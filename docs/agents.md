@@ -96,4 +96,4 @@ On error:
 {"ok": false, "error": "<description>", "code": "<code>"}
 ```
 
-Access nested fields as `data.data.field` in JavaScript (double `.data`).
+After parsing the response, access fields as `resp.data.field` (e.g., `resp.data.title` for an issue title).
