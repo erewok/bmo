@@ -43,7 +43,10 @@ pub async fn start_server(host: &str, port: u16, db_path: PathBuf) -> anyhow::Re
             })
             .await
             .ok()
-            .and_then(|r| r.ok())
+            .and_then(|r| {
+                r.map_err(|e| eprintln!("bmo SSE poller: initial board_snapshot error: {e}"))
+                    .ok()
+            })
             .unwrap_or_default();
 
             loop {
