@@ -50,6 +50,11 @@ pub trait Repository {
     /// Permanently delete the issue with `id`.
     fn delete_issue(&self, id: i64) -> anyhow::Result<()>;
 
+    /// Delete all issues whose status is in `statuses` and return the count of deleted rows.
+    /// Child table rows are removed automatically via `ON DELETE CASCADE`.
+    /// The entire deletion is issued as a single `DELETE ... WHERE status IN (...)` statement.
+    fn truncate_issues(&self, statuses: &[Status]) -> anyhow::Result<u64>;
+
     /// Return all direct children of `parent_id`.
     fn get_sub_issues(&self, parent_id: i64) -> anyhow::Result<Vec<Issue>>;
 

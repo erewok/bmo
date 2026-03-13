@@ -280,6 +280,35 @@ bmo import docket-export.json --from-docket --json
 The envelope also includes a top-level `"warnings"` array listing any records that were skipped
 due to unresolvable IDs.
 
+## bmo truncate
+
+Delete issues in bulk. Defaults to deleting all `done` issues if no filter is specified.
+
+**Synopsis:** `bmo truncate [--status <status>]... [--all] [--yes]`
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-s, --status <status>` | string (repeatable) | `done` | Delete issues with this status (repeatable for multiple) |
+| `--all` | bool | false | Delete ALL issues regardless of status (mutually exclusive with `--status`) |
+| `--yes` | bool | false | Skip the confirmation prompt |
+
+Prompts for confirmation before deleting unless `--yes` is passed. Reports the count of deleted issues.
+
+**Examples:**
+
+```
+bmo truncate
+bmo truncate --yes
+bmo truncate --status backlog --status todo
+bmo truncate --all --yes
+```
+
+**JSON output** (`data` field):
+
+```json
+{"deleted": 47}
+```
+
 ## bmo web
 
 Start the local read-only web UI for browsing issues in a browser.
