@@ -52,6 +52,7 @@ fn dispatch(command: Commands, json: bool, db: Option<String>) -> anyhow::Result
         Commands::Next(args) => cli::next::run(&args, json),
         Commands::Plan(args) => cli::plan::run(&args, json),
         Commands::Web(args) => cli::web::run(&args, json, db),
+        Commands::Truncate(args) => cli::truncate::run(&args, json, db),
         Commands::Issue(sub) => dispatch_issue(sub, json),
     }
 }

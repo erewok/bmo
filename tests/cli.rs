@@ -315,6 +315,171 @@ fn link_blocks_relation() {
     assert!(!ids.contains(&2));
 }
 
+// ── Truncate ──────────────────────────────────────────────────────────────────
+
+#[test]
+fn truncate_empty_db_prints_nothing_to_delete() {
+    let dir = setup();
+    bmo(&dir)
+        .args(["truncate", "--yes"])
+        .assert()
+        .success()
+        .stdout(contains("Nothing to delete"));
+}
+
+#[test]
+fn truncate_deletes_done_issues_by_default() {
+    let dir = setup();
+    // Create one done and one todo issue
+    bmo(&dir)
+        .args(["issue", "create", "--title", "Done issue"])
+        .assert()
+        .success();
+    bmo(&dir)
+        .args(["issue", "create", "--title", "Todo issue"])
+        .assert()
+        .success();
+    bmo(&dir)
+        .args(["issue", "close", "BMO-1"])
+        .assert()
+        .success();
+
+    bmo(&dir)
+        .args(["truncate", "--yes"])
+        .assert()
+        .success()
+        .stdout(contains("Deleted 1"));
+
+    // Done issue is gone, todo issue survives
+    bmo(&dir)
+        .args(["issue", "show", "BMO-1", "--json"])
+        .assert()
+        .failure();
+    bmo(&dir)
+        .args(["issue", "show", "BMO-2", "--json"])
+        .assert()
+        .success()
+        .stdout(contains("Todo issue"));
+}
+
+#[test]
+fn truncate_status_flag_targets_specified_status() {
+    let dir = setup();
+    bmo(&dir)
+        .args(["issue", "create", "--title", "In progress issue"])
+        .assert()
+        .success();
+    bmo(&dir)
+        .args(["issue", "create", "--title", "Todo issue"])
+        .assert()
+        .success();
+    bmo(&dir)
+        .args(["issue", "move", "BMO-1", "--status", "in-progress"])
+        .assert()
+        .success();
+
+    bmo(&dir)
+        .args(["truncate", "--status", "in-progress", "--yes"])
+        .assert()
+        .success()
+        .stdout(contains("Deleted 1"));
+
+    bmo(&dir)
+        .args(["issue", "show", "BMO-1", "--json"])
+        .assert()
+        .failure();
+    bmo(&dir)
+        .args(["issue", "show", "BMO-2", "--json"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn truncate_all_deletes_every_issue() {
+    let dir = setup();
+    bmo(&dir)
+        .args(["issue", "create", "--title", "Issue A"])
+        .assert()
+        .success();
+    bmo(&dir)
+        .args(["issue", "create", "--title", "Issue B"])
+        .assert()
+        .success();
+    bmo(&dir)
+        .args(["issue", "close", "BMO-1"])
+        .assert()
+        .success();
+
+    bmo(&dir)
+        .args(["truncate", "--all", "--yes"])
+        .assert()
+        .success()
+        .stdout(contains("Deleted 2"));
+
+    let output = bmo(&dir).args(["stats", "--json"]).output().unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["data"]["total"], 0);
+}
+
+#[test]
+fn truncate_json_output_envelope() {
+    let dir = setup();
+    bmo(&dir)
+        .args(["issue", "create", "--title", "To delete"])
+        .assert()
+        .success();
+    bmo(&dir)
+        .args(["issue", "close", "BMO-1"])
+        .assert()
+        .success();
+
+    let output = bmo(&dir)
+        .args(["truncate", "--yes", "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["ok"], true);
+    assert_eq!(json["data"]["deleted"], 1);
+}
+
+#[test]
+fn truncate_all_conflicts_with_status() {
+    let dir = setup();
+    bmo(&dir)
+        .args(["truncate", "--all", "--status", "done", "--yes"])
+        .assert()
+        .failure();
+}
+
+#[test]
+fn truncate_confirmation_prompt_aborts_on_no() {
+    let dir = setup();
+    bmo(&dir)
+        .args(["issue", "create", "--title", "Should survive"])
+        .assert()
+        .success();
+    bmo(&dir)
+        .args(["issue", "close", "BMO-1"])
+        .assert()
+        .success();
+
+    // Send "n" to the confirmation prompt via assert_cmd::Command which supports write_stdin
+    assert_cmd::Command::cargo_bin("bmo")
+        .unwrap()
+        .current_dir(dir.path())
+        .args(["truncate"])
+        .write_stdin("n\n")
+        .assert()
+        .success();
+
+    // Issue should still exist
+    bmo(&dir)
+        .args(["issue", "show", "BMO-1", "--json"])
+        .assert()
+        .success()
+        .stdout(contains("Should survive"));
+}
+
 // ── Plan ─────────────────────────────────────────────────────────────────────
 
 #[test]

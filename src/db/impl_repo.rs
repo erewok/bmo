@@ -1,6 +1,6 @@
 use crate::model::activity::NewActivityEntry;
 use crate::model::{
-    ActivityEntry, Comment, Issue, IssueFile, IssueFilter, Label, Relation, RelationKind,
+    ActivityEntry, Comment, Issue, IssueFile, IssueFilter, Label, Relation, RelationKind, Status,
 };
 
 use super::{
@@ -30,6 +30,10 @@ impl Repository for SqliteRepository {
 
     fn delete_issue(&self, id: i64) -> anyhow::Result<()> {
         self.delete_issue_impl(id)
+    }
+
+    fn truncate_issues(&self, statuses: &[Status]) -> anyhow::Result<u64> {
+        self.truncate_issues_impl(statuses)
     }
 
     fn get_sub_issues(&self, parent_id: i64) -> anyhow::Result<Vec<Issue>> {

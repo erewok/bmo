@@ -363,6 +363,26 @@ impl SqliteRepository {
         Ok(())
     }
 
+    pub(crate) fn truncate_issues_impl(&self, statuses: &[Status]) -> anyhow::Result<u64> {
+        if statuses.is_empty() {
+            return Ok(0);
+        }
+        let placeholders = statuses
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("?{}", i + 1))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!("DELETE FROM issues WHERE status IN ({placeholders})");
+        let bind: Vec<Box<dyn rusqlite::ToSql>> = statuses
+            .iter()
+            .map(|s| -> Box<dyn rusqlite::ToSql> { Box::new(s.label().to_string()) })
+            .collect();
+        let refs: Vec<&dyn rusqlite::ToSql> = bind.iter().map(|b| b.as_ref()).collect();
+        let changed = self.conn.execute(&sql, refs.as_slice())?;
+        Ok(changed as u64)
+    }
+
     pub(crate) fn get_sub_issues_impl(&self, parent_id: i64) -> anyhow::Result<Vec<Issue>> {
         let mut stmt = self.conn.prepare_cached(
             "SELECT id, parent_id, title, description, status, priority, kind, assignee, created_at, updated_at
@@ -489,5 +509,113 @@ impl SqliteRepository {
             by_priority,
             by_kind,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::{CreateIssueInput, SqliteRepository};
+    use crate::model::{Kind, Priority, Status};
+
+    fn make_repo() -> SqliteRepository {
+        SqliteRepository::open_in_memory().expect("in-memory db")
+    }
+
+    fn create_input(title: &str, status: Status) -> CreateIssueInput {
+        CreateIssueInput {
+            parent_id: None,
+            title: title.to_string(),
+            description: String::new(),
+            status,
+            priority: Priority::None,
+            kind: Kind::Task,
+            assignee: None,
+            labels: vec![],
+            files: vec![],
+            actor: None,
+        }
+    }
+
+    #[test]
+    fn truncate_empty_db_returns_zero() {
+        let repo = make_repo();
+        let deleted = repo.truncate_issues_impl(&[Status::Done]).unwrap();
+        assert_eq!(deleted, 0, "empty DB should delete 0 rows");
+    }
+
+    #[test]
+    fn truncate_with_status_done_deletes_done_leaves_others() {
+        let repo = make_repo();
+
+        repo.create_issue_impl(&create_input("done-1", Status::Done))
+            .unwrap();
+        repo.create_issue_impl(&create_input("done-2", Status::Done))
+            .unwrap();
+        repo.create_issue_impl(&create_input("open-1", Status::Todo))
+            .unwrap();
+        repo.create_issue_impl(&create_input("open-2", Status::InProgress))
+            .unwrap();
+        repo.create_issue_impl(&create_input("backlog-1", Status::Backlog))
+            .unwrap();
+
+        let deleted = repo.truncate_issues_impl(&[Status::Done]).unwrap();
+        assert_eq!(deleted, 2, "should delete exactly the 2 done issues");
+
+        // Verify surviving issues have non-done status
+        let all = repo
+            .list_issues_impl(&crate::model::IssueFilter {
+                include_done: true,
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(all.len(), 3, "3 non-done issues should remain");
+        assert!(
+            all.iter().all(|i| i.status != Status::Done),
+            "no done issues should remain"
+        );
+    }
+
+    #[test]
+    fn truncate_empty_slice_returns_zero() {
+        let repo = make_repo();
+
+        repo.create_issue_impl(&create_input("done-a", Status::Done))
+            .unwrap();
+        repo.create_issue_impl(&create_input("todo-a", Status::Todo))
+            .unwrap();
+
+        let deleted = repo.truncate_issues_impl(&[]).unwrap();
+        assert_eq!(deleted, 0, "empty slice should delete nothing");
+
+        let remaining = repo
+            .list_issues_impl(&crate::model::IssueFilter {
+                include_done: true,
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(remaining.len(), 2, "all issues should remain");
+    }
+
+    #[test]
+    fn truncate_returns_correct_count() {
+        let repo = make_repo();
+
+        for i in 0..5 {
+            repo.create_issue_impl(&create_input(&format!("done-{i}"), Status::Done))
+                .unwrap();
+        }
+        repo.create_issue_impl(&create_input("review-1", Status::Review))
+            .unwrap();
+
+        let deleted = repo.truncate_issues_impl(&[Status::Done]).unwrap();
+        assert_eq!(deleted, 5, "should return exact count of deleted rows");
+
+        let remaining = repo
+            .list_issues_impl(&crate::model::IssueFilter {
+                include_done: true,
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(remaining.len(), 1, "only the review issue should remain");
     }
 }
