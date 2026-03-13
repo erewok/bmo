@@ -289,7 +289,7 @@ Delete issues in bulk. Defaults to deleting all `done` issues if no filter is sp
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `-s, --status <status>` | string (repeatable) | `done` | Delete issues with this status (repeatable for multiple) |
-| `--all` | bool | false | Delete ALL issues regardless of status (overrides `--status`) |
+| `--all` | bool | false | Delete ALL issues regardless of status (mutually exclusive with `--status`) |
 | `--yes` | bool | false | Skip the confirmation prompt |
 
 Prompts for confirmation before deleting unless `--yes` is passed. Reports the count of deleted issues.

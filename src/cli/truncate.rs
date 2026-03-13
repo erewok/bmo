@@ -37,8 +37,11 @@ pub fn run(args: &TruncateArgs, json: bool, db: Option<String>) -> anyhow::Resul
     };
 
     // Count matching issues before deletion.
+    // NOTE: include_done must be false when a status filter is provided — the
+    // query builder only applies the status IN (...) clause when include_done
+    // is false. For --all we skip the status filter entirely and just count
+    // every row.
     let count = if args.all {
-        // Count all issues regardless of status.
         repo.count_issues(&IssueFilter {
             include_done: true,
             ..Default::default()
@@ -46,13 +49,22 @@ pub fn run(args: &TruncateArgs, json: bool, db: Option<String>) -> anyhow::Resul
     } else {
         repo.count_issues(&IssueFilter {
             status: Some(statuses.clone()),
-            include_done: true,
+            include_done: false,
             ..Default::default()
         })?
     };
 
     if count == 0 {
-        println!("Nothing to delete.");
+        if json {
+            let envelope = serde_json::json!({
+                "ok": true,
+                "data": { "deleted": 0 },
+                "message": "Nothing to delete.",
+            });
+            println!("{}", serde_json::to_string_pretty(&envelope)?);
+        } else {
+            println!("Nothing to delete.");
+        }
         return Ok(());
     }
 

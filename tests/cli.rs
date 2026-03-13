@@ -443,6 +443,45 @@ fn truncate_json_output_envelope() {
 }
 
 #[test]
+fn truncate_nothing_to_delete_when_no_status_match() {
+    let dir = setup();
+    // Only todo issues exist; truncate (default: done) should find nothing
+    bmo(&dir)
+        .args(["issue", "create", "--title", "Todo only"])
+        .assert()
+        .success();
+
+    bmo(&dir)
+        .args(["truncate", "--yes"])
+        .assert()
+        .success()
+        .stdout(contains("Nothing to delete"));
+
+    // Issue was not touched
+    bmo(&dir)
+        .args(["issue", "show", "BMO-1", "--json"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn truncate_json_nothing_to_delete_returns_envelope() {
+    let dir = setup();
+    bmo(&dir)
+        .args(["issue", "create", "--title", "Not done"])
+        .assert()
+        .success();
+
+    let output = bmo(&dir)
+        .args(["truncate", "--yes", "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["ok"], true);
+    assert_eq!(json["data"]["deleted"], 0);
+}
+
+#[test]
 fn truncate_all_conflicts_with_status() {
     let dir = setup();
     bmo(&dir)
