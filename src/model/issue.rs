@@ -1,11 +1,16 @@
 use chrono::{DateTime, Utc};
 use clap::ValueEnum;
+use sea_query::{Cond, Expr, ExprTrait, Order, Query, SqliteQueryBuilder, enum_def};
+use sea_query_rusqlite::{RusqliteBinder, RusqliteValues, rusqlite};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 
+use super::LabelIden;
+
 /// A single tracked work item.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[enum_def] // Generate IssueIden for use in sea-query
 pub struct Issue {
     /// Auto-assigned numeric identifier.
     pub id: i64,
@@ -29,6 +34,14 @@ impl Issue {
     pub fn display_id(&self) -> String {
         format!("BMO-{}", self.id)
     }
+}
+
+/// A single tracked work item.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[enum_def] // Generate IssueIden for use in sea-query
+pub struct IssueLabel {
+    pub issue_id: i64,
+    pub label_id: i64,
 }
 
 // ── Status ────────────────────────────────────────────────────────────────────
@@ -237,6 +250,87 @@ pub struct IssueFilter {
     pub limit: Option<usize>,
     pub offset: Option<usize>,
     pub include_done: bool,
+}
+
+impl IssueFilter {
+    pub fn into_issue_query(&mut self) -> (String, RusqliteValues) {
+        // Build a dynamic SQL query based on which filters are set.
+        let mut binding = Query::select();
+        let mut query = binding
+            .columns([
+                IssueIden::Id,
+                IssueIden::ParentId,
+                IssueIden::Title,
+                IssueIden::Description,
+                IssueIden::Status,
+                IssueIden::Priority,
+                IssueIden::Kind,
+                IssueIden::Assignee,
+                IssueIden::CreatedAt,
+                IssueIden::UpdatedAt,
+            ])
+            .from(IssueIden::Table);
+
+        if self.include_done {
+            // No additional filter needed, include all statuses
+        } else if let Some(statuses) = &self.status {
+            query = query.and_where(Expr::col(IssueIden::Status).is_in(statuses.iter().map(|s| s.label())));
+        } else {
+            // By default, exclude done issues
+            query = query.and_where(Expr::col(IssueIden::Status).ne("done"));
+        }
+
+        // Apply filters if specified. Each filter is optional, and if provided should be applied as an AND condition.
+        query.apply_if(self.priority.take(), |q, v| {
+            q.and_where(Expr::col(IssueIden::Priority).is_in(v.iter().map(|p| p.label())));
+        });
+        query.apply_if(self.kind.take(), |q, v| {
+            q.and_where(Expr::col(IssueIden::Kind).is_in(v.iter().map(|k| k.label())));
+        });
+        query.apply_if(self.assignee.take(), |q, v| {
+            q.and_where(Expr::col(IssueIden::Assignee).eq(v.as_str()));
+        });
+        query.apply_if(self.parent_id.take(), |q, v| {
+            q.and_where(Expr::col(IssueIden::ParentId).eq(v));
+        });
+        query.apply_if(self.search.take(), |q, v| {
+            q.cond_where(
+                Cond::any()
+                    .add(
+                        Expr::col(IssueIden::Title).like(format!("%{}%", v).as_str())
+                    )
+                    .add(
+                        Expr::col(IssueIden::Description).like(format!("%{}%", v).as_str())
+                    )
+            );
+        });
+        if self.labels.is_some() {
+            // Issues must have all specified labels.
+            // When filtering by labels, we need to join the issue_labels to labels table.
+            let labels = self.labels.as_ref().unwrap().iter().map(|s| s.as_str());
+            let labels_len = self.labels.as_ref().unwrap().len();
+            let mut binding = Query::select();
+            let subselect = binding
+                .expr(Expr::value(1))
+                .from(IssueLabelIden::Table)
+                .and_where(Expr::col(IssueLabelIden::IssueId).equals(IssueIden::Id))
+                .and_where(
+                    Expr::col(IssueLabelIden::LabelId).in_subquery(
+                    Query::select()
+                        .column(LabelIden::Id)
+                        .from(LabelIden::Table)
+                        .and_where(Expr::col(LabelIden::Name).is_in(labels))
+                        .take()
+                    )
+                );
+            query.expr_as(Expr::exists(subselect.take()), "label_match_count").take().gt(labels_len as i64 - 1);
+        }
+
+        query = query.order_by(IssueIden::Priority, Order::Desc).order_by(IssueIden::Id, Order::Asc);
+        query.apply_if(self.limit, |q, v| { q.limit(v as u64); });
+        query.apply_if(self.offset, |q, v| { q.offset(v as u64); });
+        query.build_rusqlite(SqliteQueryBuilder)
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

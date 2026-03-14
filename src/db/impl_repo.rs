@@ -36,6 +36,10 @@ impl Repository for SqliteRepository {
         self.truncate_issues_impl(statuses)
     }
 
+    fn truncate_all_issues(&self) -> anyhow::Result<u64> {
+        self.truncate_all_issues_impl()
+    }
+
     fn get_sub_issues(&self, parent_id: i64) -> anyhow::Result<Vec<Issue>> {
         self.get_sub_issues_impl(parent_id)
     }

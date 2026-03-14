@@ -303,10 +303,11 @@ bmo truncate --status backlog --status todo
 bmo truncate --all --yes
 ```
 
-**JSON output** (`data` field):
+**JSON output**:
 
 ```json
-{"deleted": 47}
+{"ok": true, "data": {"deleted": 47}, "message": "Deleted 47 issue(s)."}
+{"ok": true, "data": {"deleted": 0}, "message": "Nothing to delete."}
 ```
 
 ## bmo web

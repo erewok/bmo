@@ -80,114 +80,115 @@ impl SqliteRepository {
         }
     }
 
-    pub(crate) fn list_issues_impl(&self, filter: &IssueFilter) -> anyhow::Result<Vec<Issue>> {
-        let mut sql = String::from(
-            "SELECT id, parent_id, title, description, status, priority, kind, assignee, created_at, updated_at FROM issues WHERE 1=1",
-        );
-        let mut bind: Vec<Box<dyn rusqlite::ToSql>> = vec![];
+    pub(crate) fn list_issues_impl(&self, filter: &mut IssueFilter) -> anyhow::Result<Vec<Issue>> {
+        // let mut sql = String::from(
+        //     "SELECT id, parent_id, title, description, status, priority, kind, assignee, created_at, updated_at FROM issues WHERE 1=1",
+        // );
+        // let bind: Vec<Box<dyn rusqlite::ToSql>> = vec![];
 
-        if !filter.include_done {
-            if let Some(statuses) = &filter.status {
-                if !statuses.is_empty() {
-                    let placeholders = statuses
-                        .iter()
-                        .enumerate()
-                        .map(|(i, _)| format!("?{}", bind.len() + i + 1))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    sql.push_str(&format!(" AND status IN ({placeholders})"));
-                    for s in statuses {
-                        bind.push(Box::new(s.label().to_string()));
-                    }
-                }
-            } else {
-                // Default: exclude done
-                let idx = bind.len() + 1;
-                sql.push_str(&format!(" AND status != ?{idx}"));
-                bind.push(Box::new("done".to_string()));
-            }
-        }
+        // if !filter.include_done {
+        //     if let Some(statuses) = &filter.status {
+        //         if !statuses.is_empty() {
+        //             let placeholders = statuses
+        //                 .iter()
+        //                 .enumerate()
+        //                 .map(|(i, _)| format!("?{}", bind.len() + i + 1))
+        //                 .collect::<Vec<_>>()
+        //                 .join(", ");
+        //             sql.push_str(&format!(" AND status IN ({placeholders})"));
+        //             for s in statuses {
+        //                 bind.push(Box::new(s.label().to_string()));
+        //             }
+        //         }
+        //     } else {
+        //         // Default: exclude done
+        //         let idx = bind.len() + 1;
+        //         sql.push_str(&format!(" AND status != ?{idx}"));
+        //         bind.push(Box::new("done".to_string()));
+        //     }
+        // }
 
-        if let Some(priorities) = &filter.priority
-            && !priorities.is_empty()
-        {
-            let placeholders = priorities
-                .iter()
-                .enumerate()
-                .map(|(i, _)| format!("?{}", bind.len() + i + 1))
-                .collect::<Vec<_>>()
-                .join(", ");
-            sql.push_str(&format!(" AND priority IN ({placeholders})"));
-            for p in priorities {
-                bind.push(Box::new(p.label().to_string()));
-            }
-        }
+        // if let Some(priorities) = &filter.priority
+        //     && !priorities.is_empty()
+        // {
+        //     let placeholders = priorities
+        //         .iter()
+        //         .enumerate()
+        //         .map(|(i, _)| format!("?{}", bind.len() + i + 1))
+        //         .collect::<Vec<_>>()
+        //         .join(", ");
+        //     sql.push_str(&format!(" AND priority IN ({placeholders})"));
+        //     for p in priorities {
+        //         bind.push(Box::new(p.label().to_string()));
+        //     }
+        // }
 
-        if let Some(kinds) = &filter.kind
-            && !kinds.is_empty()
-        {
-            let placeholders = kinds
-                .iter()
-                .enumerate()
-                .map(|(i, _)| format!("?{}", bind.len() + i + 1))
-                .collect::<Vec<_>>()
-                .join(", ");
-            sql.push_str(&format!(" AND kind IN ({placeholders})"));
-            for k in kinds {
-                bind.push(Box::new(k.label().to_string()));
-            }
-        }
+        // if let Some(kinds) = &filter.kind
+        //     && !kinds.is_empty()
+        // {
+        //     let placeholders = kinds
+        //         .iter()
+        //         .enumerate()
+        //         .map(|(i, _)| format!("?{}", bind.len() + i + 1))
+        //         .collect::<Vec<_>>()
+        //         .join(", ");
+        //     sql.push_str(&format!(" AND kind IN ({placeholders})"));
+        //     for k in kinds {
+        //         bind.push(Box::new(k.label().to_string()));
+        //     }
+        // }
 
-        if let Some(assignee) = &filter.assignee {
-            let idx = bind.len() + 1;
-            sql.push_str(&format!(" AND assignee = ?{idx}"));
-            bind.push(Box::new(assignee.clone()));
-        }
+        // if let Some(assignee) = &filter.assignee {
+        //     let idx = bind.len() + 1;
+        //     sql.push_str(&format!(" AND assignee = ?{idx}"));
+        //     bind.push(Box::new(assignee.clone()));
+        // }
 
-        if let Some(parent_id) = filter.parent_id {
-            let idx = bind.len() + 1;
-            sql.push_str(&format!(" AND parent_id = ?{idx}"));
-            bind.push(Box::new(parent_id));
-        }
+        // if let Some(parent_id) = filter.parent_id {
+        //     let idx = bind.len() + 1;
+        //     sql.push_str(&format!(" AND parent_id = ?{idx}"));
+        //     bind.push(Box::new(parent_id));
+        // }
 
-        if let Some(search) = &filter.search {
-            let idx = bind.len() + 1;
-            sql.push_str(&format!(
-                " AND (title LIKE ?{idx} OR description LIKE ?{idx})"
-            ));
-            bind.push(Box::new(format!("%{search}%")));
-        }
+        // if let Some(search) = &filter.search {
+        //     let idx = bind.len() + 1;
+        //     sql.push_str(&format!(
+        //         " AND (title LIKE ?{idx} OR description LIKE ?{idx})"
+        //     ));
+        //     bind.push(Box::new(format!("%{search}%")));
+        // }
 
-        // Label filter: require all specified labels via EXISTS subqueries (AND semantics).
-        if let Some(label_filter) = &filter.labels
-            && !label_filter.is_empty()
-        {
-            for label_name in label_filter {
-                let idx = bind.len() + 1;
-                sql.push_str(&format!(
-                    " AND EXISTS (SELECT 1 FROM issue_labels il JOIN labels l ON l.id = il.label_id WHERE il.issue_id = issues.id AND l.name = ?{idx})"
-                ));
-                bind.push(Box::new(label_name.clone()));
-            }
-        }
+        // // Label filter: require all specified labels via EXISTS subqueries (AND semantics).
+        // if let Some(label_filter) = &filter.labels
+        //     && !label_filter.is_empty()
+        // {
+        //     for label_name in label_filter {
+        //         let idx = bind.len() + 1;
+        //         sql.push_str(&format!(
+        //             " AND EXISTS (SELECT 1 FROM issue_labels il JOIN labels l ON l.id = il.label_id WHERE il.issue_id = issues.id AND l.name = ?{idx})"
+        //         ));
+        //         bind.push(Box::new(label_name.clone()));
+        //     }
+        // }
 
-        sql.push_str(" ORDER BY priority DESC, id ASC");
+        // sql.push_str(" ORDER BY priority DESC, id ASC");
 
-        if let Some(limit) = filter.limit {
-            let idx = bind.len() + 1;
-            sql.push_str(&format!(" LIMIT ?{idx}"));
-            bind.push(Box::new(limit as i64));
-        }
+        // if let Some(limit) = filter.limit {
+        //     let idx = bind.len() + 1;
+        //     sql.push_str(&format!(" LIMIT ?{idx}"));
+        //     bind.push(Box::new(limit as i64));
+        // }
 
-        if let Some(offset) = filter.offset {
-            let idx = bind.len() + 1;
-            sql.push_str(&format!(" OFFSET ?{idx}"));
-            bind.push(Box::new(offset as i64));
-        }
+        // if let Some(offset) = filter.offset {
+        //     let idx = bind.len() + 1;
+        //     sql.push_str(&format!(" OFFSET ?{idx}"));
+        //     bind.push(Box::new(offset as i64));
+        // }
+        let (query, values) = filter.into_issue_query();
 
-        let mut stmt = self.conn.prepare(&sql)?;
-        let refs: Vec<&dyn rusqlite::ToSql> = bind.iter().map(|b| b.as_ref()).collect();
-        let rows = stmt.query_map(refs.as_slice(), row_to_issue)?;
+        let mut stmt = self.conn.prepare(&query.as_str())?;
+        // let refs: Vec<&dyn rusqlite::ToSql> = values.iter().map(|b| b.as_ref()).collect();
+        let rows = stmt.query_map(&*values.as_params(), row_to_issue)?;
         let mut issues = Vec::new();
         for r in rows {
             let mut issue = r?;
@@ -380,6 +381,11 @@ impl SqliteRepository {
             .collect();
         let refs: Vec<&dyn rusqlite::ToSql> = bind.iter().map(|b| b.as_ref()).collect();
         let changed = self.conn.execute(&sql, refs.as_slice())?;
+        Ok(changed as u64)
+    }
+
+    pub(crate) fn truncate_all_issues_impl(&self) -> anyhow::Result<u64> {
+        let changed = self.conn.execute("DELETE FROM issues", [])?;
         Ok(changed as u64)
     }
 

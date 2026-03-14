@@ -1,7 +1,10 @@
 use chrono::{DateTime, Utc};
+use sea_query::enum_def;
 use serde::{Deserialize, Serialize};
 
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[enum_def] // Generate ActivityEntryIden for use in sea-query
 pub struct ActivityEntry {
     pub id: i64,
     pub issue_id: i64,

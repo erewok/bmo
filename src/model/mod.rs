@@ -8,9 +8,9 @@ pub mod issue;
 pub mod label;
 pub mod relation;
 
-pub use activity::ActivityEntry;
-pub use comment::Comment;
-pub use file::IssueFile;
-pub use issue::{Issue, IssueFilter, Kind, Priority, Status};
-pub use label::Label;
-pub use relation::{Relation, RelationKind};
+pub use activity::{ActivityEntry, ActivityEntryIden};
+pub use comment::{Comment, CommentIden};
+pub use file::{IssueFile, IssueFileIden};
+pub use issue::{Issue, IssueIden, IssueFilter, Kind, Priority, Status};
+pub use label::{Label, LabelIden};
+pub use relation::{Relation, RelationIden, RelationKind};

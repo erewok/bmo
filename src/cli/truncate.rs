@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use clap::Args;
 
 use crate::config::find_bmo_dir;
@@ -8,7 +10,7 @@ use crate::model::{IssueFilter, Status};
 pub struct TruncateArgs {
     /// Delete issues with these statuses (repeatable; default: done)
     #[arg(short, long, value_name = "STATUS")]
-    pub status: Vec<Status>,
+    pub status: Vec<String>,
 
     /// Delete ALL issues regardless of status (mutually exclusive with --status)
     #[arg(long, conflicts_with = "status")]
@@ -17,6 +19,25 @@ pub struct TruncateArgs {
     /// Skip confirmation prompt (for non-interactive use)
     #[arg(long)]
     pub yes: bool,
+}
+
+impl TruncateArgs {
+    pub fn get_statuses(&self) -> Vec<Status> {
+        if self.all {
+            Status::all().to_vec()
+        } else if !self.status.is_empty() {
+            self.status
+                .iter()
+                .filter_map(|s| {
+                    Status::from_str(s)
+                        .map_err(|e| anyhow::anyhow!("invalid status {:?}: {}", s, e))
+                        .ok()
+                })
+                .collect()
+        } else {
+            vec![Status::Done]
+        }
+    }
 }
 
 pub fn run(args: &TruncateArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
@@ -31,7 +52,7 @@ pub fn run(args: &TruncateArgs, json: bool, db: Option<String>) -> anyhow::Resul
     let statuses: Vec<Status> = if args.all {
         Status::all().to_vec()
     } else if !args.status.is_empty() {
-        args.status.clone()
+        args.get_statuses()
     } else {
         vec![Status::Done]
     };
@@ -94,7 +115,11 @@ pub fn run(args: &TruncateArgs, json: bool, db: Option<String>) -> anyhow::Resul
     }
 
     // Perform deletion in a single atomic statement.
-    let deleted = repo.truncate_issues(&statuses)?;
+    let deleted = if args.all {
+        repo.truncate_all_issues()?
+    } else {
+        repo.truncate_issues(&statuses)?
+    };
 
     let msg = format!("Deleted {} issue(s).", deleted);
     if json {

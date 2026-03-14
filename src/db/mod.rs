@@ -55,6 +55,11 @@ pub trait Repository {
     /// The entire deletion is issued as a single `DELETE ... WHERE status IN (...)` statement.
     fn truncate_issues(&self, statuses: &[Status]) -> anyhow::Result<u64>;
 
+    /// Delete all issues regardless of status and return the count of deleted rows.
+    /// Child table rows are removed automatically via `ON DELETE CASCADE`.
+    /// The entire deletion is issued as a single `DELETE` statement.
+    fn truncate_all_issues(&self) -> anyhow::Result<u64>;
+
     /// Return all direct children of `parent_id`.
     fn get_sub_issues(&self, parent_id: i64) -> anyhow::Result<Vec<Issue>>;
 

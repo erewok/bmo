@@ -1,7 +1,9 @@
 use chrono::Utc;
 use rusqlite::params;
+use sea_query::{Expr, ExprTrait, Order, Query, SqliteQueryBuilder};
+use sea_query_rusqlite::{RusqliteBinder, rusqlite};
 
-use crate::model::ActivityEntry;
+use crate::model::{ActivityEntry, ActivityEntryIden};
 use crate::model::activity::NewActivityEntry;
 
 use super::SqliteRepository;
@@ -21,10 +23,22 @@ impl SqliteRepository {
         issue_id: i64,
         limit: usize,
     ) -> anyhow::Result<Vec<ActivityEntry>> {
-        let mut stmt = self.conn.prepare_cached(
-            "SELECT id, issue_id, kind, detail, actor, created_at FROM activity_log WHERE issue_id = ?1 ORDER BY created_at DESC LIMIT ?2",
-        )?;
-        let rows = stmt.query_map(params![issue_id, limit as i64], |r| {
+        let (sql, values) = Query::select()
+            .columns([
+                ActivityEntryIden::Id,
+                ActivityEntryIden::IssueId,
+                ActivityEntryIden::Kind,
+                ActivityEntryIden::Detail,
+                ActivityEntryIden::Actor,
+                ActivityEntryIden::CreatedAt,
+            ])
+            .from(ActivityEntryIden::Table)
+            .order_by(ActivityEntryIden::CreatedAt, Order::Desc)
+            .and_where(Expr::col(ActivityEntryIden::IssueId).eq(issue_id))
+            .limit(limit as u64)
+            .build_rusqlite(SqliteQueryBuilder);
+        let mut stmt = self.conn.prepare_cached(sql.as_str())?;
+        let rows = stmt.query_map(&*values.as_params(), |r| {
             let created_at_str: String = r.get(5)?;
             Ok(ActivityEntry {
                 id: r.get(0)?,
