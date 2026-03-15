@@ -654,10 +654,7 @@ async fn main() -> anyhow::Result<()> {
 
         // Print summary stats
         let stats = repo.get_stats()?;
-        let all_issues = repo.list_issues(&IssueFilter {
-            include_done: true,
-            ..Default::default()
-        })?;
+        let all_issues = repo.list_issues(&mut IssueFilter::all())?;
 
         let total_comments: usize = all_issues
             .iter()

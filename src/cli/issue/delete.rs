@@ -8,6 +8,12 @@ use crate::db::{Repository, open_db};
 pub struct DeleteArgs {
     /// Issue ID
     pub id: String,
+
+    // Todo: support multiple IDs in one command
+    // /// List of IDs to delete (alternative to --id)
+    // #[arg(long)]
+    // pub ids: Vec<String>,
+
     /// Skip confirmation prompt
     #[arg(long)]
     pub yes: bool,

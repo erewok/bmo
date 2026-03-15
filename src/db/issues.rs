@@ -1,7 +1,9 @@
 use chrono::Utc;
 use rusqlite::params;
+use sea_query::{Expr, Func, Query, SqliteQueryBuilder};
+use sea_query_rusqlite::{RusqliteBinder, rusqlite};
 
-use crate::model::{Issue, IssueFilter, Kind, Priority, Status};
+use crate::model::{Issue, IssueFilter, IssueIden, Kind, Priority, Status};
 
 use super::{CreateIssueInput, SqliteRepository, UpdateIssueInput};
 
@@ -86,7 +88,7 @@ impl SqliteRepository {
         // );
         // let bind: Vec<Box<dyn rusqlite::ToSql>> = vec![];
 
-        // if !filter.include_done {
+        // if !filter.findall {
         //     if let Some(statuses) = &filter.status {
         //         if !statuses.is_empty() {
         //             let placeholders = statuses
@@ -184,13 +186,16 @@ impl SqliteRepository {
         //     sql.push_str(&format!(" OFFSET ?{idx}"));
         //     bind.push(Box::new(offset as i64));
         // }
-        let (query, values) = filter.into_issue_query();
+        let sql = filter.into_issue_query();
+        let (query, values) = sql.build_rusqlite(SqliteQueryBuilder);
+        // let (query, values) = filter.into_issue_query();
 
         let mut stmt = self.conn.prepare(&query.as_str())?;
         // let refs: Vec<&dyn rusqlite::ToSql> = values.iter().map(|b| b.as_ref()).collect();
         let rows = stmt.query_map(&*values.as_params(), row_to_issue)?;
         let mut issues = Vec::new();
         for r in rows {
+            // TODO: this should be a join with labels and files in the original query to avoid N+1.
             let mut issue = r?;
             issue.labels = self.get_issue_label_names(issue.id)?;
             issue.files = self.get_issue_file_paths(issue.id)?;
@@ -200,97 +205,18 @@ impl SqliteRepository {
         Ok(issues)
     }
 
-    pub(crate) fn count_issues_impl(&self, filter: &IssueFilter) -> anyhow::Result<i64> {
-        let mut sql = String::from("SELECT COUNT(*) FROM issues WHERE 1=1");
-        let mut bind: Vec<Box<dyn rusqlite::ToSql>> = vec![];
+    pub(crate) fn count_issues_impl(&self, filter: &mut IssueFilter) -> anyhow::Result<i64> {
+        // let mut sql = String::from("SELECT COUNT(*) FROM issues WHERE 1=1");
+        let _sql = filter.into_issue_query();
+        let mut binding = Query::select();
+        // Build count over issue filter.
+        let sql = binding.expr(Func::count(Expr::col((IssueIden::Table, IssueIden::Id)))).from_subquery(_sql, "issues");
+        let (query, values) = sql.build_rusqlite(SqliteQueryBuilder);
 
-        if !filter.include_done {
-            if let Some(statuses) = &filter.status {
-                if !statuses.is_empty() {
-                    let placeholders = statuses
-                        .iter()
-                        .enumerate()
-                        .map(|(i, _)| format!("?{}", bind.len() + i + 1))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    sql.push_str(&format!(" AND status IN ({placeholders})"));
-                    for s in statuses {
-                        bind.push(Box::new(s.label().to_string()));
-                    }
-                }
-            } else {
-                let idx = bind.len() + 1;
-                sql.push_str(&format!(" AND status != ?{idx}"));
-                bind.push(Box::new("done".to_string()));
-            }
-        }
-
-        if let Some(priorities) = &filter.priority
-            && !priorities.is_empty()
-        {
-            let placeholders = priorities
-                .iter()
-                .enumerate()
-                .map(|(i, _)| format!("?{}", bind.len() + i + 1))
-                .collect::<Vec<_>>()
-                .join(", ");
-            sql.push_str(&format!(" AND priority IN ({placeholders})"));
-            for p in priorities {
-                bind.push(Box::new(p.label().to_string()));
-            }
-        }
-
-        if let Some(kinds) = &filter.kind
-            && !kinds.is_empty()
-        {
-            let placeholders = kinds
-                .iter()
-                .enumerate()
-                .map(|(i, _)| format!("?{}", bind.len() + i + 1))
-                .collect::<Vec<_>>()
-                .join(", ");
-            sql.push_str(&format!(" AND kind IN ({placeholders})"));
-            for k in kinds {
-                bind.push(Box::new(k.label().to_string()));
-            }
-        }
-
-        if let Some(assignee) = &filter.assignee {
-            let idx = bind.len() + 1;
-            sql.push_str(&format!(" AND assignee = ?{idx}"));
-            bind.push(Box::new(assignee.clone()));
-        }
-
-        if let Some(parent_id) = filter.parent_id {
-            let idx = bind.len() + 1;
-            sql.push_str(&format!(" AND parent_id = ?{idx}"));
-            bind.push(Box::new(parent_id));
-        }
-
-        if let Some(search) = &filter.search {
-            let idx = bind.len() + 1;
-            sql.push_str(&format!(
-                " AND (title LIKE ?{idx} OR description LIKE ?{idx})"
-            ));
-            bind.push(Box::new(format!("%{search}%")));
-        }
-
-        // Label filter: require all specified labels via EXISTS subqueries.
-        if let Some(label_filter) = &filter.labels
-            && !label_filter.is_empty()
-        {
-            for label_name in label_filter {
-                let idx = bind.len() + 1;
-                sql.push_str(&format!(
-                    " AND EXISTS (SELECT 1 FROM issue_labels il JOIN labels l ON l.id = il.label_id WHERE il.issue_id = issues.id AND l.name = ?{idx})"
-                ));
-                bind.push(Box::new(label_name.clone()));
-            }
-        }
-
-        let mut stmt = self.conn.prepare(&sql)?;
-        let refs: Vec<&dyn rusqlite::ToSql> = bind.iter().map(|b| b.as_ref()).collect();
-        let count: i64 = stmt.query_row(refs.as_slice(), |r| r.get(0))?;
+        let mut stmt = self.conn.prepare(&query.as_str())?;
+        // let bind: Vec<Box<dyn rusqlite::ToSql>> = vec![];
+        // let refs: Vec<&dyn rusqlite::ToSql> = bind.iter().map(|b| b.as_ref()).collect();
+        let count = stmt.query_map(&*values.as_params(), |row| row.get(0))?.next().unwrap_or(Ok(0))?;
         Ok(count)
     }
 
@@ -440,20 +366,15 @@ impl SqliteRepository {
         // limit_per_status items regardless of how the data is distributed
         // across statuses. All queries run on the same connection (self.conn
         // via list_issues_impl), no additional DB opens needed.
-        //
-        // Setting include_done: false with an explicit status filter causes
-        // list_issues_impl to emit `AND status IN (?)` — correct for all five
-        // statuses including Done, because the explicit filter takes priority
-        // over the default done-exclusion clause.
+
         let mut map: HashMap<Status, Vec<Issue>> = HashMap::with_capacity(all_statuses.len());
         for status in &all_statuses {
-            let filter = crate::model::IssueFilter {
+            let mut filter = crate::model::IssueFilter {
                 status: Some(vec![*status]),
-                include_done: false,
                 limit: Some(limit_per_status),
                 ..Default::default()
             };
-            let issues = self.list_issues_impl(&filter)?;
+            let issues = self.list_issues_impl(&mut filter)?;
             map.insert(*status, issues);
         }
 
@@ -569,8 +490,8 @@ mod tests {
 
         // Verify surviving issues have non-done status
         let all = repo
-            .list_issues_impl(&crate::model::IssueFilter {
-                include_done: true,
+            .list_issues_impl(&mut crate::model::IssueFilter {
+                findall: true,
                 ..Default::default()
             })
             .unwrap();
@@ -594,10 +515,7 @@ mod tests {
         assert_eq!(deleted, 0, "empty slice should delete nothing");
 
         let remaining = repo
-            .list_issues_impl(&crate::model::IssueFilter {
-                include_done: true,
-                ..Default::default()
-            })
+            .list_issues_impl(&mut crate::model::IssueFilter::all())
             .unwrap();
         assert_eq!(remaining.len(), 2, "all issues should remain");
     }
@@ -616,12 +534,11 @@ mod tests {
         let deleted = repo.truncate_issues_impl(&[Status::Done]).unwrap();
         assert_eq!(deleted, 5, "should return exact count of deleted rows");
 
-        let remaining = repo
-            .list_issues_impl(&crate::model::IssueFilter {
-                include_done: true,
-                ..Default::default()
-            })
-            .unwrap();
+        let mut filter = crate::model::IssueFilter {
+            findall: true,
+            ..Default::default()
+        };
+        let remaining = repo.list_issues_impl(&mut filter).unwrap();
         assert_eq!(remaining.len(), 1, "only the review issue should remain");
     }
 }

@@ -28,20 +28,17 @@ pub fn run(args: &BoardArgs, json: bool) -> anyhow::Result<()> {
         OutputMode::Human
     });
 
-    let filter = FilterBuilder {
+    let mut filter = FilterBuilder {
         priorities: args.priority.clone(),
         labels: args.label.clone(),
         assignee: args.assignee.clone(),
-        include_done: true,
+        findall: true,
         limit: 500,
         ..Default::default()
     }
     .build()?;
 
-    let all_issues = repo.list_issues(&IssueFilter {
-        include_done: true,
-        ..filter
-    })?;
+    let all_issues = repo.list_issues(&mut filter)?;
 
     let board = BoardColumns {
         backlog: all_issues

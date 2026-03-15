@@ -13,6 +13,8 @@ pub struct FilterBuilder {
     pub limit: usize,
     pub offset: usize,
     pub include_done: bool,
+    // --all is a short-circuit that ignores all other filters and selects all issues.
+    pub findall: bool,
 }
 
 impl FilterBuilder {
@@ -81,6 +83,7 @@ impl FilterBuilder {
                 Some(self.offset)
             },
             include_done: self.include_done,
+            findall: self.findall,
         })
     }
 }

@@ -70,7 +70,7 @@ impl FromStr for RelationKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[enum_def] // Generate RelationIden for use in sea-query
+#[enum_def(table_name = "issue_relations")] // Generate RelationIden for use in sea-query
 pub struct Relation {
     pub id: i64,
     pub from_id: i64,

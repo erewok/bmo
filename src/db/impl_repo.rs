@@ -16,11 +16,11 @@ impl Repository for SqliteRepository {
         self.get_issue_impl(id)
     }
 
-    fn list_issues(&self, filter: &IssueFilter) -> anyhow::Result<Vec<Issue>> {
+    fn list_issues(&self, filter: &mut IssueFilter) -> anyhow::Result<Vec<Issue>> {
         self.list_issues_impl(filter)
     }
 
-    fn count_issues(&self, filter: &IssueFilter) -> anyhow::Result<i64> {
+    fn count_issues(&self, filter: &mut IssueFilter) -> anyhow::Result<i64> {
         self.count_issues_impl(filter)
     }
 

@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
 use clap::ValueEnum;
-use sea_query::{Cond, Expr, ExprTrait, Order, Query, SqliteQueryBuilder, enum_def};
-use sea_query_rusqlite::{RusqliteBinder, RusqliteValues, rusqlite};
+use sea_query::{Cond, Expr, ExprTrait, Order, Query, SelectStatement, enum_def};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
@@ -10,7 +9,7 @@ use super::LabelIden;
 
 /// A single tracked work item.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[enum_def] // Generate IssueIden for use in sea-query
+#[enum_def(table_name = "issues")] // Generate IssueIden for use in sea-query
 pub struct Issue {
     /// Auto-assigned numeric identifier.
     pub id: i64,
@@ -38,7 +37,7 @@ impl Issue {
 
 /// A single tracked work item.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[enum_def] // Generate IssueIden for use in sea-query
+#[enum_def(table_name = "issue_labels")] // Generate IssueLabelIden for use in sea-query
 pub struct IssueLabel {
     pub issue_id: i64,
     pub label_id: i64,
@@ -249,11 +248,21 @@ pub struct IssueFilter {
     pub search: Option<String>,
     pub limit: Option<usize>,
     pub offset: Option<usize>,
+    // By default filters above do not include `done` status`
     pub include_done: bool,
+    // short-circuit everything above and select all issues.
+    pub findall: bool,
 }
 
 impl IssueFilter {
-    pub fn into_issue_query(&mut self) -> (String, RusqliteValues) {
+    pub fn all() -> Self {
+        Self {
+            findall: true,
+            ..Default::default()
+        }
+    }
+
+    pub fn into_issue_query(&mut self) -> SelectStatement {
         // Build a dynamic SQL query based on which filters are set.
         let mut binding = Query::select();
         let mut query = binding
@@ -271,8 +280,9 @@ impl IssueFilter {
             ])
             .from(IssueIden::Table);
 
-        if self.include_done {
-            // No additional filter needed, include all statuses
+        if self.findall { // '--all'
+            return query.take();
+            // No additional status filter needed, include all statuses
         } else if let Some(statuses) = &self.status {
             query = query.and_where(Expr::col(IssueIden::Status).is_in(statuses.iter().map(|s| s.label())));
         } else {
@@ -329,7 +339,8 @@ impl IssueFilter {
         query = query.order_by(IssueIden::Priority, Order::Desc).order_by(IssueIden::Id, Order::Asc);
         query.apply_if(self.limit, |q, v| { q.limit(v as u64); });
         query.apply_if(self.offset, |q, v| { q.offset(v as u64); });
-        query.build_rusqlite(SqliteQueryBuilder)
+        query.take()
+        // query.build_rusqlite(SqliteQueryBuilder)
     }
 }
 

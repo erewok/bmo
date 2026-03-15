@@ -58,19 +58,15 @@ pub fn run(args: &TruncateArgs, json: bool, db: Option<String>) -> anyhow::Resul
     };
 
     // Count matching issues before deletion.
-    // NOTE: include_done must be false when a status filter is provided — the
-    // query builder only applies the status IN (...) clause when include_done
+    // NOTE: findall must be false when a status filter is provided — the
+    // query builder only applies the status IN (...) clause when findall
     // is false. For --all we skip the status filter entirely and just count
     // every row.
     let count = if args.all {
-        repo.count_issues(&IssueFilter {
-            include_done: true,
-            ..Default::default()
-        })?
+        repo.count_issues(&mut IssueFilter::all())?
     } else {
-        repo.count_issues(&IssueFilter {
+        repo.count_issues(&mut IssueFilter {
             status: Some(statuses.clone()),
-            include_done: false,
             ..Default::default()
         })?
     };

@@ -24,8 +24,8 @@ pub struct IssueQuery {
     pub status: Option<String>,
     pub kind: Option<String>,
     pub priority: Option<String>,
-    /// defaults to false; pass ?include_done=true to include done issues
-    pub include_done: Option<bool>,
+    /// defaults to false; pass ?all=true to include done issues
+    pub all: Option<bool>,
 }
 
 /// Query parameters accepted by GET /api/board.
@@ -206,10 +206,10 @@ pub async fn api_issue_list(
             .transpose()
             .map_err(|e| anyhow::anyhow!("invalid priority: {e}"))?;
 
-        let include_done = params.include_done.unwrap_or(false);
+        let findall = params.all.unwrap_or(false);
 
-        let filter = IssueFilter {
-            include_done,
+        let mut filter = IssueFilter {
+            findall,
             status: status_filter.clone(),
             kind: kind_filter.clone(),
             priority: priority_filter.clone(),
@@ -220,8 +220,8 @@ pub async fn api_issue_list(
         };
 
         // Count total matching records (without limit/offset) for pagination metadata.
-        let count_filter = IssueFilter {
-            include_done,
+        let mut count_filter = IssueFilter {
+            findall,
             status: status_filter,
             kind: kind_filter,
             priority: priority_filter,
@@ -231,8 +231,8 @@ pub async fn api_issue_list(
             ..Default::default()
         };
 
-        let issues = repo.list_issues(&filter)?;
-        let total = repo.count_issues(&count_filter)? as usize;
+        let issues = repo.list_issues(&mut filter)?;
+        let total = repo.count_issues(&mut count_filter)? as usize;
 
         let issues_json: Vec<serde_json::Value> = issues
             .iter()
@@ -548,13 +548,11 @@ pub async fn api_graph(State(state): State<AppState>) -> impl IntoResponse {
         let repo = open_db(&state.db_path)?;
 
         // Fetch all issues so we can identify active ones and their parents.
-        let all_issues = repo.list_issues(&IssueFilter {
-            include_done: true,
-            limit: None,
-            offset: None,
+        let all_issues = repo.list_issues(&mut IssueFilter {
+            findall: true,
             ..Default::default()
-        })?;
-
+        })?
+;
         use std::collections::{HashMap, HashSet};
 
         // Index all issues by id for parent lookups.

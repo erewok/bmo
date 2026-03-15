@@ -242,10 +242,10 @@
     var status = statusSelect.value;
     if (status) {
       params.set('status', status);
-      if (status === 'done') params.set('include_done', 'true');
+      if (status === 'done') params.set('findall', 'true');
     } else {
       // No status filter — include done issues so they show up
-      params.set('include_done', 'true');
+      params.set('findall', 'true');
     }
 
     var kind = kindSelect.value;
