@@ -9,6 +9,7 @@ pub mod issue;
 pub mod next;
 pub mod plan;
 pub mod stats;
+pub mod truncate;
 pub mod version;
 pub mod web;
 
@@ -49,6 +50,8 @@ pub enum Commands {
     Plan(plan::PlanArgs),
     /// Start the local web UI
     Web(web::WebArgs),
+    /// Delete issues in bulk
+    Truncate(truncate::TruncateArgs),
     /// Manage issues
     #[command(subcommand)]
     Issue(issue::IssueCommands),

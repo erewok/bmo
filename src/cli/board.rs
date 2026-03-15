@@ -3,7 +3,7 @@ use clap::Args;
 use crate::config::find_bmo_dir;
 use crate::db::{Repository, open_db};
 use crate::filter::FilterBuilder;
-use crate::model::{IssueFilter, Status};
+use crate::model::Status;
 use crate::output::{BoardColumns, OutputMode, make_printer};
 
 #[derive(Args)]
@@ -32,16 +32,13 @@ pub fn run(args: &BoardArgs, json: bool) -> anyhow::Result<()> {
         priorities: args.priority.clone(),
         labels: args.label.clone(),
         assignee: args.assignee.clone(),
-        include_done: true,
+        findall: true,
         limit: 500,
         ..Default::default()
     }
     .build()?;
 
-    let all_issues = repo.list_issues(&IssueFilter {
-        include_done: true,
-        ..filter
-    })?;
+    let all_issues = repo.list_issues(filter)?;
 
     let board = BoardColumns {
         backlog: all_issues

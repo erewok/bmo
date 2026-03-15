@@ -39,16 +39,26 @@ pub trait Repository {
     fn get_issue(&self, id: i64) -> anyhow::Result<Option<Issue>>;
 
     /// Return all issues matching `filter`, in priority-descending, id-ascending order.
-    fn list_issues(&self, filter: &IssueFilter) -> anyhow::Result<Vec<Issue>>;
+    fn list_issues(&self, filter: IssueFilter) -> anyhow::Result<Vec<Issue>>;
 
     /// Return the count of issues matching `filter` without loading the rows.
-    fn count_issues(&self, filter: &IssueFilter) -> anyhow::Result<i64>;
+    fn count_issues(&self, filter: IssueFilter) -> anyhow::Result<i64>;
 
     /// Apply `input` fields to the issue with `id` and return the updated issue.
     fn update_issue(&self, id: i64, input: &UpdateIssueInput) -> anyhow::Result<Issue>;
 
     /// Permanently delete the issue with `id`.
     fn delete_issue(&self, id: i64) -> anyhow::Result<()>;
+
+    /// Delete all issues whose status is in `statuses` and return the count of deleted rows.
+    /// Sub-issues referencing deleted issues have their `parent_id` set to `NULL` (`ON DELETE SET NULL`); they are not deleted.
+    /// The entire deletion is issued as a single `DELETE ... WHERE status IN (...)` statement.
+    fn truncate_issues(&self, statuses: &[Status]) -> anyhow::Result<u64>;
+
+    /// Delete all issues regardless of status and return the count of deleted rows.
+    /// Sub-issues referencing deleted issues have their `parent_id` set to `NULL` (`ON DELETE SET NULL`); they are not deleted.
+    /// `truncate_all_issues` uses an unconditional `DELETE FROM issues`.
+    fn truncate_all_issues(&self) -> anyhow::Result<u64>;
 
     /// Return all direct children of `parent_id`.
     fn get_sub_issues(&self, parent_id: i64) -> anyhow::Result<Vec<Issue>>;

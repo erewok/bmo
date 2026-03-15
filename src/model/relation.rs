@@ -1,3 +1,4 @@
+use sea_query::enum_def;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
@@ -69,6 +70,7 @@ impl FromStr for RelationKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[enum_def(table_name = "issue_relations")] // Generate RelationIden for use in sea-query
 pub struct Relation {
     pub id: i64,
     pub from_id: i64,

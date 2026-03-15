@@ -1,11 +1,22 @@
+use sea_query::{Expr, ExprTrait, Iden, OnConflict, Query, SqliteQueryBuilder};
+use sea_query_rusqlite::{RusqliteBinder, rusqlite};
+
 use crate::model::activity::NewActivityEntry;
 use crate::model::{
-    ActivityEntry, Comment, Issue, IssueFile, IssueFilter, Label, Relation, RelationKind,
+    ActivityEntry, Comment, Issue, IssueFile, IssueFilter, Label, Relation, RelationKind, Status,
 };
 
 use super::{
     AddCommentInput, CreateIssueInput, Repository, SqliteRepository, Stats, UpdateIssueInput,
 };
+
+/// Identifier enum for the `meta` key-value table.
+#[derive(Iden)]
+enum Meta {
+    Table,
+    Key,
+    Value,
+}
 
 impl Repository for SqliteRepository {
     fn create_issue(&self, input: &CreateIssueInput) -> anyhow::Result<Issue> {
@@ -16,11 +27,11 @@ impl Repository for SqliteRepository {
         self.get_issue_impl(id)
     }
 
-    fn list_issues(&self, filter: &IssueFilter) -> anyhow::Result<Vec<Issue>> {
+    fn list_issues(&self, filter: IssueFilter) -> anyhow::Result<Vec<Issue>> {
         self.list_issues_impl(filter)
     }
 
-    fn count_issues(&self, filter: &IssueFilter) -> anyhow::Result<i64> {
+    fn count_issues(&self, filter: IssueFilter) -> anyhow::Result<i64> {
         self.count_issues_impl(filter)
     }
 
@@ -30,6 +41,14 @@ impl Repository for SqliteRepository {
 
     fn delete_issue(&self, id: i64) -> anyhow::Result<()> {
         self.delete_issue_impl(id)
+    }
+
+    fn truncate_issues(&self, statuses: &[Status]) -> anyhow::Result<u64> {
+        self.truncate_issues_impl(statuses)
+    }
+
+    fn truncate_all_issues(&self) -> anyhow::Result<u64> {
+        self.truncate_all_issues_impl()
     }
 
     fn get_sub_issues(&self, parent_id: i64) -> anyhow::Result<Vec<Issue>> {
@@ -110,11 +129,14 @@ impl Repository for SqliteRepository {
     }
 
     fn get_meta(&self, key: &str) -> anyhow::Result<Option<String>> {
-        let result = self.conn.query_row(
-            "SELECT value FROM meta WHERE key = ?1",
-            rusqlite::params![key],
-            |r| r.get(0),
-        );
+        let (sql, values) = Query::select()
+            .column(Meta::Value)
+            .from(Meta::Table)
+            .and_where(Expr::col(Meta::Key).eq(key))
+            .build_rusqlite(SqliteQueryBuilder);
+        let result = self
+            .conn
+            .query_row(sql.as_str(), &*values.as_params(), |r| r.get(0));
         match result {
             Ok(v) => Ok(Some(v)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
@@ -123,10 +145,17 @@ impl Repository for SqliteRepository {
     }
 
     fn set_meta(&self, key: &str, value: &str) -> anyhow::Result<()> {
-        self.conn.execute(
-            "INSERT OR REPLACE INTO meta (key, value) VALUES (?1, ?2)",
-            rusqlite::params![key, value],
-        )?;
+        let (sql, values) = Query::insert()
+            .into_table(Meta::Table)
+            .columns([Meta::Key, Meta::Value])
+            .values_panic([key.into(), value.into()])
+            .on_conflict(
+                OnConflict::column(Meta::Key)
+                    .update_column(Meta::Value)
+                    .to_owned(),
+            )
+            .build_rusqlite(SqliteQueryBuilder);
+        self.conn.execute(sql.as_str(), &*values.as_params())?;
         Ok(())
     }
 

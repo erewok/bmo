@@ -280,6 +280,36 @@ bmo import docket-export.json --from-docket --json
 The envelope also includes a top-level `"warnings"` array listing any records that were skipped
 due to unresolvable IDs.
 
+## bmo truncate
+
+Delete issues in bulk. Defaults to deleting all `done` issues if no filter is specified.
+
+**Synopsis:** `bmo truncate [--status <status>]... [--all] [--yes]`
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-s, --status <status>` | string (repeatable) | `done` | Delete issues with this status (repeatable for multiple) |
+| `--all` | bool | false | Delete ALL issues regardless of status (mutually exclusive with `--status`) |
+| `--yes` | bool | false | Skip the confirmation prompt |
+
+Prompts for confirmation before deleting unless `--yes` is passed. Reports the count of deleted issues.
+
+**Examples:**
+
+```
+bmo truncate
+bmo truncate --yes
+bmo truncate --status backlog --status todo
+bmo truncate --all --yes
+```
+
+**JSON output**:
+
+```json
+{"ok": true, "data": {"deleted": 47}, "message": "Deleted 47 issue(s)."}
+{"ok": true, "data": {"deleted": 0}, "message": "Nothing to delete."}
+```
+
 ## bmo web
 
 Start the local read-only web UI for browsing issues in a browser.
@@ -353,7 +383,8 @@ Alias: `bmo issue ls`
 | `--search <text>` | string | (none) | Full-text search in title and description |
 | `--limit <n>` | integer | 50 | Maximum number of results |
 | `--sort <field>` | string | (none) | Sort field |
-| `--all` | bool | false | Include done issues |
+| `--include-done` | bool | false | Removes the default `status != done` exclusion; done issues are returned alongside active ones. All other filters (priority, kind, labels, etc.) remain active. Distinct from `--all` which short-circuits every predicate. |
+| `--all` | bool | false | Return all issues regardless of status or other filters (short-circuits all predicates) |
 | `--oneline` | bool | false | Print one compact line per issue (ID, status, priority, kind, title) |
 
 **Examples:**
@@ -363,6 +394,7 @@ bmo issue list
 bmo issue list --status in-progress --assignee alice
 bmo issue list --kind bug --priority high --all --json
 bmo issue list --search "login" --limit 10
+bmo issue list --include-done --priority high
 ```
 
 **JSON output** (`data` field): array of issue objects.

@@ -7,6 +7,9 @@ use crate::output::{OutputMode, make_printer};
 
 #[derive(Args)]
 pub struct ListArgs {
+    /// Find everything: short-circuit all other filters and select all issues.
+    #[arg(long)]
+    pub all: bool,
     /// Filter by status (repeatable)
     #[arg(short, long)]
     pub status: Vec<String>,
@@ -36,13 +39,37 @@ pub struct ListArgs {
     pub sort: Option<String>,
     /// Include done issues
     #[arg(long)]
-    pub all: bool,
+    pub include_done: bool,
     /// Compact one-line-per-issue output
     #[arg(long)]
     pub oneline: bool,
 }
 
+impl ListArgs {
+    pub fn validate(&self) -> anyhow::Result<()> {
+        if self.all
+            && [
+                !self.status.is_empty(),
+                !self.priority.is_empty(),
+                !self.kind.is_empty(),
+                self.assignee.is_some(),
+                !self.label.is_empty(),
+                self.parent.is_some(),
+                self.search.is_some(),
+            ]
+            .iter()
+            .any(|&x| x)
+        {
+            println!(
+                "--all overrides all other filters: ignoring all filters and selecting all issues"
+            );
+        }
+        Ok(())
+    }
+}
+
 pub fn run(args: &ListArgs, json: bool) -> anyhow::Result<()> {
+    args.validate()?;
     let bmo_dir = find_bmo_dir()?;
     let repo = open_db(&bmo_dir.join("issues.db"))?;
     let printer = make_printer(if json {
@@ -63,11 +90,12 @@ pub fn run(args: &ListArgs, json: bool) -> anyhow::Result<()> {
         search: args.search.clone(),
         limit: args.limit,
         offset: 0,
-        include_done: args.all,
+        findall: args.all,
+        include_done: args.include_done,
     }
     .build()?;
 
-    let issues = repo.list_issues(&filter)?;
+    let issues = repo.list_issues(filter)?;
     printer.print_issue_list(&issues);
     Ok(())
 }
