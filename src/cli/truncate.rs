@@ -22,20 +22,19 @@ pub struct TruncateArgs {
 }
 
 impl TruncateArgs {
-    pub fn get_statuses(&self) -> Vec<Status> {
+    pub fn get_statuses(&self) -> anyhow::Result<Vec<Status>> {
         if self.all {
-            Status::all().to_vec()
+            Ok(Status::all().to_vec())
         } else if !self.status.is_empty() {
             self.status
                 .iter()
-                .filter_map(|s| {
+                .map(|s| {
                     Status::from_str(s)
                         .map_err(|e| anyhow::anyhow!("invalid status {:?}: {}", s, e))
-                        .ok()
                 })
                 .collect()
         } else {
-            vec![Status::Done]
+            Ok(vec![Status::Done])
         }
     }
 }
@@ -52,7 +51,7 @@ pub fn run(args: &TruncateArgs, json: bool, db: Option<String>) -> anyhow::Resul
     let statuses: Vec<Status> = if args.all {
         Status::all().to_vec()
     } else if !args.status.is_empty() {
-        args.get_statuses()
+        args.get_statuses()?
     } else {
         vec![Status::Done]
     };
@@ -75,8 +74,7 @@ pub fn run(args: &TruncateArgs, json: bool, db: Option<String>) -> anyhow::Resul
         if json {
             let envelope = serde_json::json!({
                 "ok": true,
-                "data": { "deleted": 0 },
-                "message": "Nothing to delete.",
+                "data": { "deleted": 0, "message": "Nothing to delete." },
             });
             println!("{}", serde_json::to_string_pretty(&envelope)?);
         } else {
@@ -121,8 +119,7 @@ pub fn run(args: &TruncateArgs, json: bool, db: Option<String>) -> anyhow::Resul
     if json {
         let envelope = serde_json::json!({
             "ok": true,
-            "data": { "deleted": deleted },
-            "message": msg,
+            "data": { "deleted": deleted, "message": msg },
         });
         println!("{}", serde_json::to_string_pretty(&envelope)?);
     } else {

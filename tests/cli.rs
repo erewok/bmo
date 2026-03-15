@@ -519,6 +519,57 @@ fn truncate_confirmation_prompt_aborts_on_no() {
         .stdout(contains("Should survive"));
 }
 
+#[test]
+fn truncate_status_flag_nothing_to_delete_when_no_match() {
+    let dir = setup();
+    // Only a backlog issue exists (default status); truncate --status done should find nothing
+    bmo(&dir)
+        .args(["issue", "create", "--title", "active work"])
+        .assert()
+        .success();
+
+    bmo(&dir)
+        .args(["truncate", "--status", "done", "--yes"])
+        .assert()
+        .success()
+        .stdout(contains("Nothing to delete"));
+
+    // The backlog issue was not touched
+    bmo(&dir)
+        .args(["issue", "show", "BMO-1", "--json"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn truncate_backlog_status_nothing_to_delete() {
+    let dir = setup();
+    // Create a todo issue explicitly; truncate --status backlog should find nothing
+    bmo(&dir)
+        .args([
+            "issue",
+            "create",
+            "--title",
+            "active work",
+            "--status",
+            "todo",
+        ])
+        .assert()
+        .success();
+
+    bmo(&dir)
+        .args(["truncate", "--status", "backlog", "--yes"])
+        .assert()
+        .success()
+        .stdout(contains("Nothing to delete"));
+
+    // The todo issue was not touched
+    bmo(&dir)
+        .args(["issue", "show", "BMO-1", "--json"])
+        .assert()
+        .success();
+}
+
 // ── Plan ─────────────────────────────────────────────────────────────────────
 
 #[test]

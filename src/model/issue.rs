@@ -294,68 +294,68 @@ impl IssueFilter {
             ])
             .from(IssueIden::Table);
 
-        if self.findall {
-            // '--all'
-            return query.take();
-            // No additional status filter needed, include all statuses
-        } else if let Some(statuses) = &self.status {
-            if !statuses.is_empty() {
-                query = query.and_where(
-                    Expr::col(IssueIden::Status).is_in(statuses.iter().map(|s| s.label())),
-                );
+        // When findall = true, skip all WHERE predicates; ORDER BY / LIMIT / OFFSET still applied below.
+        if !self.findall {
+            if let Some(statuses) = &self.status {
+                if !statuses.is_empty() {
+                    query = query.and_where(
+                        Expr::col(IssueIden::Status).is_in(statuses.iter().map(|s| s.label())),
+                    );
+                } else {
+                    // Empty status vec means "match nothing" — caller explicitly requested an
+                    // empty result set (e.g. a programmatic filter with no valid statuses).
+                    query = query.and_where(Expr::val(false));
+                }
+            } else if self.include_done {
+                // include_done suppresses the default exclusion; no status WHERE clause applied
             } else {
-                // Empty status vec means "match nothing" — caller explicitly requested an
-                // empty result set (e.g. a programmatic filter with no valid statuses).
-                query = query.and_where(Expr::val(false));
+                // By default, exclude done issues
+                query = query.and_where(Expr::col(IssueIden::Status).ne("done"));
             }
-        } else if self.include_done {
-            // include_done suppresses the default exclusion; no status WHERE clause applied
-        } else {
-            // By default, exclude done issues
-            query = query.and_where(Expr::col(IssueIden::Status).ne("done"));
-        }
 
-        // Apply filters if specified. Each filter is optional, and if provided should be applied as an AND condition.
-        query.apply_if(self.priority.take(), |q, v| {
-            q.and_where(Expr::col(IssueIden::Priority).is_in(v.iter().map(|p| p.label())));
-        });
-        query.apply_if(self.kind.take(), |q, v| {
-            q.and_where(Expr::col(IssueIden::Kind).is_in(v.iter().map(|k| k.label())));
-        });
-        query.apply_if(self.assignee.take(), |q, v| {
-            q.and_where(Expr::col(IssueIden::Assignee).eq(v.as_str()));
-        });
-        query.apply_if(self.parent_id.take(), |q, v| {
-            q.and_where(Expr::col(IssueIden::ParentId).eq(v));
-        });
-        query.apply_if(self.search.take(), |q, v| {
-            q.cond_where(
-                Cond::any()
-                    .add(Expr::col(IssueIden::Title).like(format!("%{}%", v).as_str()))
-                    .add(Expr::col(IssueIden::Description).like(format!("%{}%", v).as_str())),
-            );
-        });
-        if let Some(labels) = self.labels {
-            // Issues must have ALL specified labels — one EXISTS subquery per label.
-            for label_name in labels {
-                let mut subselect = Query::select();
-                subselect
-                    .expr(Expr::val(1))
-                    .from(IssueLabelIden::Table)
-                    .inner_join(
-                        LabelIden::Table,
-                        Expr::col((LabelIden::Table, LabelIden::Id))
-                            .equals((IssueLabelIden::Table, IssueLabelIden::LabelId)),
-                    )
-                    .and_where(
-                        Expr::col((IssueLabelIden::Table, IssueLabelIden::IssueId))
-                            .equals((IssueIden::Table, IssueIden::Id)),
-                    )
-                    .and_where(Expr::col((LabelIden::Table, LabelIden::Name)).eq(label_name));
-                query = query.and_where(Expr::exists(subselect));
+            // Apply filters if specified. Each filter is optional, and if provided should be applied as an AND condition.
+            query.apply_if(self.priority.take(), |q, v| {
+                q.and_where(Expr::col(IssueIden::Priority).is_in(v.iter().map(|p| p.label())));
+            });
+            query.apply_if(self.kind.take(), |q, v| {
+                q.and_where(Expr::col(IssueIden::Kind).is_in(v.iter().map(|k| k.label())));
+            });
+            query.apply_if(self.assignee.take(), |q, v| {
+                q.and_where(Expr::col(IssueIden::Assignee).eq(v.as_str()));
+            });
+            query.apply_if(self.parent_id.take(), |q, v| {
+                q.and_where(Expr::col(IssueIden::ParentId).eq(v));
+            });
+            query.apply_if(self.search.take(), |q, v| {
+                q.cond_where(
+                    Cond::any()
+                        .add(Expr::col(IssueIden::Title).like(format!("%{}%", v).as_str()))
+                        .add(Expr::col(IssueIden::Description).like(format!("%{}%", v).as_str())),
+                );
+            });
+            if let Some(labels) = self.labels {
+                // Issues must have ALL specified labels — one EXISTS subquery per label.
+                for label_name in labels {
+                    let mut subselect = Query::select();
+                    subselect
+                        .expr(Expr::val(1))
+                        .from(IssueLabelIden::Table)
+                        .inner_join(
+                            LabelIden::Table,
+                            Expr::col((LabelIden::Table, LabelIden::Id))
+                                .equals((IssueLabelIden::Table, IssueLabelIden::LabelId)),
+                        )
+                        .and_where(
+                            Expr::col((IssueLabelIden::Table, IssueLabelIden::IssueId))
+                                .equals((IssueIden::Table, IssueIden::Id)),
+                        )
+                        .and_where(Expr::col((LabelIden::Table, LabelIden::Name)).eq(label_name));
+                    query = query.and_where(Expr::exists(subselect));
+                }
             }
         }
 
+        // ORDER BY / LIMIT / OFFSET always applied, including when findall = true.
         query = query
             .order_by(IssueIden::Priority, Order::Desc)
             .order_by(IssueIden::Id, Order::Asc);

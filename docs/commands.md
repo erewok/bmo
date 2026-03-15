@@ -383,7 +383,8 @@ Alias: `bmo issue ls`
 | `--search <text>` | string | (none) | Full-text search in title and description |
 | `--limit <n>` | integer | 50 | Maximum number of results |
 | `--sort <field>` | string | (none) | Sort field |
-| `--all` | bool | false | Include done issues |
+| `--include-done` | bool | false | Removes the default `status != done` exclusion; done issues are returned alongside active ones. All other filters (priority, kind, labels, etc.) remain active. Distinct from `--all` which short-circuits every predicate. |
+| `--all` | bool | false | Return all issues regardless of status or other filters (short-circuits all predicates) |
 | `--oneline` | bool | false | Print one compact line per issue (ID, status, priority, kind, title) |
 
 **Examples:**
@@ -393,6 +394,7 @@ bmo issue list
 bmo issue list --status in-progress --assignee alice
 bmo issue list --kind bug --priority high --all --json
 bmo issue list --search "login" --limit 10
+bmo issue list --include-done --priority high
 ```
 
 **JSON output** (`data` field): array of issue objects.
