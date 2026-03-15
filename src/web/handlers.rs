@@ -208,7 +208,7 @@ pub async fn api_issue_list(
 
         let findall = params.all.unwrap_or(false);
 
-        let mut filter = IssueFilter {
+        let filter = IssueFilter {
             findall,
             status: status_filter.clone(),
             kind: kind_filter.clone(),
@@ -220,7 +220,7 @@ pub async fn api_issue_list(
         };
 
         // Count total matching records (without limit/offset) for pagination metadata.
-        let mut count_filter = IssueFilter {
+        let count_filter = IssueFilter {
             findall,
             status: status_filter,
             kind: kind_filter,
@@ -231,8 +231,8 @@ pub async fn api_issue_list(
             ..Default::default()
         };
 
-        let issues = repo.list_issues(&mut filter)?;
-        let total = repo.count_issues(&mut count_filter)? as usize;
+        let issues = repo.list_issues(filter)?;
+        let total = repo.count_issues(count_filter)? as usize;
 
         let issues_json: Vec<serde_json::Value> = issues
             .iter()
@@ -548,11 +548,10 @@ pub async fn api_graph(State(state): State<AppState>) -> impl IntoResponse {
         let repo = open_db(&state.db_path)?;
 
         // Fetch all issues so we can identify active ones and their parents.
-        let all_issues = repo.list_issues(&mut IssueFilter {
+        let all_issues = repo.list_issues(IssueFilter {
             findall: true,
             ..Default::default()
-        })?
-;
+        })?;
         use std::collections::{HashMap, HashSet};
 
         // Index all issues by id for parent lookups.

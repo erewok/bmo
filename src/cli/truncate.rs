@@ -63,9 +63,9 @@ pub fn run(args: &TruncateArgs, json: bool, db: Option<String>) -> anyhow::Resul
     // is false. For --all we skip the status filter entirely and just count
     // every row.
     let count = if args.all {
-        repo.count_issues(&mut IssueFilter::all())?
+        repo.count_issues(IssueFilter::all())?
     } else {
-        repo.count_issues(&mut IssueFilter {
+        repo.count_issues(IssueFilter {
             status: Some(statuses.clone()),
             ..Default::default()
         })?

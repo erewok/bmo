@@ -1,9 +1,13 @@
+use std::collections::HashMap;
+
 use chrono::Utc;
-use rusqlite::params;
-use sea_query::{Expr, Func, Query, SqliteQueryBuilder};
+use sea_query::{Expr, ExprTrait, Func, Order, Query, SqliteQueryBuilder};
 use sea_query_rusqlite::{RusqliteBinder, rusqlite};
 
-use crate::model::{Issue, IssueFilter, IssueIden, Kind, Priority, Status};
+use crate::model::issue::IssueLabelIden;
+use crate::model::{
+    Issue, IssueFileIden, IssueFilter, IssueIden, Kind, LabelIden, Priority, Status,
+};
 
 use super::{CreateIssueInput, SqliteRepository, UpdateIssueInput};
 
@@ -33,22 +37,35 @@ fn row_to_issue(row: &rusqlite::Row<'_>) -> rusqlite::Result<Issue> {
 impl SqliteRepository {
     pub(crate) fn create_issue_impl(&self, input: &CreateIssueInput) -> anyhow::Result<Issue> {
         let now = Utc::now().to_rfc3339();
-        self.conn.execute(
-            "INSERT INTO issues (parent_id, title, description, status, priority, kind, assignee, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-            params![
-                input.parent_id,
-                input.title,
-                input.description,
-                input.status.label(),
-                input.priority.label(),
-                input.kind.label(),
-                input.assignee,
-                now,
-                now,
-            ],
-        )?;
-        let id = self.conn.last_insert_rowid();
+        let (sql, values) = Query::insert()
+            .into_table(IssueIden::Table)
+            .columns([
+                IssueIden::ParentId,
+                IssueIden::Title,
+                IssueIden::Description,
+                IssueIden::Status,
+                IssueIden::Priority,
+                IssueIden::Kind,
+                IssueIden::Assignee,
+                IssueIden::CreatedAt,
+                IssueIden::UpdatedAt,
+            ])
+            .values_panic([
+                input.parent_id.into(),
+                input.title.clone().into(),
+                input.description.clone().into(),
+                input.status.label().into(),
+                input.priority.label().into(),
+                input.kind.label().into(),
+                input.assignee.clone().into(),
+                now.clone().into(),
+                now.into(),
+            ])
+            .returning_col(IssueIden::Id)
+            .build_rusqlite(SqliteQueryBuilder);
+        let id: i64 = self
+            .conn
+            .query_row(sql.as_str(), &*values.as_params(), |r| r.get(0))?;
 
         // Add labels
         for label_name in &input.labels {
@@ -66,11 +83,24 @@ impl SqliteRepository {
     }
 
     pub(crate) fn get_issue_impl(&self, id: i64) -> anyhow::Result<Option<Issue>> {
-        let mut stmt = self.conn.prepare_cached(
-            "SELECT id, parent_id, title, description, status, priority, kind, assignee, created_at, updated_at
-             FROM issues WHERE id = ?1",
-        )?;
-        let result = stmt.query_row(params![id], row_to_issue);
+        let (sql, values) = Query::select()
+            .columns([
+                IssueIden::Id,
+                IssueIden::ParentId,
+                IssueIden::Title,
+                IssueIden::Description,
+                IssueIden::Status,
+                IssueIden::Priority,
+                IssueIden::Kind,
+                IssueIden::Assignee,
+                IssueIden::CreatedAt,
+                IssueIden::UpdatedAt,
+            ])
+            .from(IssueIden::Table)
+            .and_where(Expr::col(IssueIden::Id).eq(id))
+            .build_rusqlite(SqliteQueryBuilder);
+        let mut stmt = self.conn.prepare_cached(sql.as_str())?;
+        let result = stmt.query_row(&*values.as_params(), row_to_issue);
         match result {
             Ok(mut issue) => {
                 issue.labels = self.get_issue_label_names(id)?;
@@ -82,141 +112,91 @@ impl SqliteRepository {
         }
     }
 
-    pub(crate) fn list_issues_impl(&self, filter: &mut IssueFilter) -> anyhow::Result<Vec<Issue>> {
-        // let mut sql = String::from(
-        //     "SELECT id, parent_id, title, description, status, priority, kind, assignee, created_at, updated_at FROM issues WHERE 1=1",
-        // );
-        // let bind: Vec<Box<dyn rusqlite::ToSql>> = vec![];
-
-        // if !filter.findall {
-        //     if let Some(statuses) = &filter.status {
-        //         if !statuses.is_empty() {
-        //             let placeholders = statuses
-        //                 .iter()
-        //                 .enumerate()
-        //                 .map(|(i, _)| format!("?{}", bind.len() + i + 1))
-        //                 .collect::<Vec<_>>()
-        //                 .join(", ");
-        //             sql.push_str(&format!(" AND status IN ({placeholders})"));
-        //             for s in statuses {
-        //                 bind.push(Box::new(s.label().to_string()));
-        //             }
-        //         }
-        //     } else {
-        //         // Default: exclude done
-        //         let idx = bind.len() + 1;
-        //         sql.push_str(&format!(" AND status != ?{idx}"));
-        //         bind.push(Box::new("done".to_string()));
-        //     }
-        // }
-
-        // if let Some(priorities) = &filter.priority
-        //     && !priorities.is_empty()
-        // {
-        //     let placeholders = priorities
-        //         .iter()
-        //         .enumerate()
-        //         .map(|(i, _)| format!("?{}", bind.len() + i + 1))
-        //         .collect::<Vec<_>>()
-        //         .join(", ");
-        //     sql.push_str(&format!(" AND priority IN ({placeholders})"));
-        //     for p in priorities {
-        //         bind.push(Box::new(p.label().to_string()));
-        //     }
-        // }
-
-        // if let Some(kinds) = &filter.kind
-        //     && !kinds.is_empty()
-        // {
-        //     let placeholders = kinds
-        //         .iter()
-        //         .enumerate()
-        //         .map(|(i, _)| format!("?{}", bind.len() + i + 1))
-        //         .collect::<Vec<_>>()
-        //         .join(", ");
-        //     sql.push_str(&format!(" AND kind IN ({placeholders})"));
-        //     for k in kinds {
-        //         bind.push(Box::new(k.label().to_string()));
-        //     }
-        // }
-
-        // if let Some(assignee) = &filter.assignee {
-        //     let idx = bind.len() + 1;
-        //     sql.push_str(&format!(" AND assignee = ?{idx}"));
-        //     bind.push(Box::new(assignee.clone()));
-        // }
-
-        // if let Some(parent_id) = filter.parent_id {
-        //     let idx = bind.len() + 1;
-        //     sql.push_str(&format!(" AND parent_id = ?{idx}"));
-        //     bind.push(Box::new(parent_id));
-        // }
-
-        // if let Some(search) = &filter.search {
-        //     let idx = bind.len() + 1;
-        //     sql.push_str(&format!(
-        //         " AND (title LIKE ?{idx} OR description LIKE ?{idx})"
-        //     ));
-        //     bind.push(Box::new(format!("%{search}%")));
-        // }
-
-        // // Label filter: require all specified labels via EXISTS subqueries (AND semantics).
-        // if let Some(label_filter) = &filter.labels
-        //     && !label_filter.is_empty()
-        // {
-        //     for label_name in label_filter {
-        //         let idx = bind.len() + 1;
-        //         sql.push_str(&format!(
-        //             " AND EXISTS (SELECT 1 FROM issue_labels il JOIN labels l ON l.id = il.label_id WHERE il.issue_id = issues.id AND l.name = ?{idx})"
-        //         ));
-        //         bind.push(Box::new(label_name.clone()));
-        //     }
-        // }
-
-        // sql.push_str(" ORDER BY priority DESC, id ASC");
-
-        // if let Some(limit) = filter.limit {
-        //     let idx = bind.len() + 1;
-        //     sql.push_str(&format!(" LIMIT ?{idx}"));
-        //     bind.push(Box::new(limit as i64));
-        // }
-
-        // if let Some(offset) = filter.offset {
-        //     let idx = bind.len() + 1;
-        //     sql.push_str(&format!(" OFFSET ?{idx}"));
-        //     bind.push(Box::new(offset as i64));
-        // }
+    pub(crate) fn list_issues_impl(&self, filter: IssueFilter) -> anyhow::Result<Vec<Issue>> {
         let sql = filter.into_issue_query();
         let (query, values) = sql.build_rusqlite(SqliteQueryBuilder);
-        // let (query, values) = filter.into_issue_query();
 
-        let mut stmt = self.conn.prepare(&query.as_str())?;
-        // let refs: Vec<&dyn rusqlite::ToSql> = values.iter().map(|b| b.as_ref()).collect();
+        let mut stmt = self.conn.prepare(query.as_str())?;
         let rows = stmt.query_map(&*values.as_params(), row_to_issue)?;
         let mut issues = Vec::new();
         for r in rows {
-            // TODO: this should be a join with labels and files in the original query to avoid N+1.
-            let mut issue = r?;
-            issue.labels = self.get_issue_label_names(issue.id)?;
-            issue.files = self.get_issue_file_paths(issue.id)?;
-            issues.push(issue);
+            issues.push(r?);
+        }
+
+        // Early-exit: nothing to hydrate.
+        if issues.is_empty() {
+            return Ok(issues);
+        }
+
+        let ids: Vec<i64> = issues.iter().map(|i| i.id).collect();
+
+        // Batch label query — one round-trip for all issues.
+        let (sql, values) = Query::select()
+            .column((IssueLabelIden::Table, IssueLabelIden::IssueId))
+            .column((LabelIden::Table, LabelIden::Name))
+            .from(IssueLabelIden::Table)
+            .inner_join(
+                LabelIden::Table,
+                Expr::col((LabelIden::Table, LabelIden::Id))
+                    .equals((IssueLabelIden::Table, IssueLabelIden::LabelId)),
+            )
+            .and_where(
+                Expr::col((IssueLabelIden::Table, IssueLabelIden::IssueId)).is_in(ids.clone()),
+            )
+            .order_by((LabelIden::Table, LabelIden::Name), Order::Asc)
+            .build_rusqlite(SqliteQueryBuilder);
+
+        let mut label_map: HashMap<i64, Vec<String>> = HashMap::new();
+        let mut stmt = self.conn.prepare(sql.as_str())?;
+        let rows = stmt.query_map(&*values.as_params(), |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })?;
+        for row in rows {
+            let (issue_id, name) = row?;
+            label_map.entry(issue_id).or_default().push(name);
+        }
+
+        // Batch file query — one round-trip for all issues.
+        let (sql, values) = Query::select()
+            .column(IssueFileIden::IssueId)
+            .column(IssueFileIden::Path)
+            .from(IssueFileIden::Table)
+            .and_where(Expr::col(IssueFileIden::IssueId).is_in(ids))
+            .order_by(IssueFileIden::Path, Order::Asc)
+            .build_rusqlite(SqliteQueryBuilder);
+
+        let mut file_map: HashMap<i64, Vec<String>> = HashMap::new();
+        let mut stmt = self.conn.prepare(sql.as_str())?;
+        let rows = stmt.query_map(&*values.as_params(), |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })?;
+        for row in rows {
+            let (issue_id, path) = row?;
+            file_map.entry(issue_id).or_default().push(path);
+        }
+
+        // Attach labels and files to each issue from the maps.
+        for issue in &mut issues {
+            issue.labels = label_map.remove(&issue.id).unwrap_or_default();
+            issue.files = file_map.remove(&issue.id).unwrap_or_default();
         }
 
         Ok(issues)
     }
 
-    pub(crate) fn count_issues_impl(&self, filter: &mut IssueFilter) -> anyhow::Result<i64> {
-        // let mut sql = String::from("SELECT COUNT(*) FROM issues WHERE 1=1");
-        let _sql = filter.into_issue_query();
+    pub(crate) fn count_issues_impl(&self, filter: IssueFilter) -> anyhow::Result<i64> {
+        let inner = filter.into_issue_query();
         let mut binding = Query::select();
-        // Build count over issue filter.
-        let sql = binding.expr(Func::count(Expr::col((IssueIden::Table, IssueIden::Id)))).from_subquery(_sql, "issues");
+        let sql = binding
+            .expr(Func::count(Expr::col((IssueIden::Table, IssueIden::Id))))
+            .from_subquery(inner, "issues");
         let (query, values) = sql.build_rusqlite(SqliteQueryBuilder);
 
-        let mut stmt = self.conn.prepare(&query.as_str())?;
-        // let bind: Vec<Box<dyn rusqlite::ToSql>> = vec![];
-        // let refs: Vec<&dyn rusqlite::ToSql> = bind.iter().map(|b| b.as_ref()).collect();
-        let count = stmt.query_map(&*values.as_params(), |row| row.get(0))?.next().unwrap_or(Ok(0))?;
+        let mut stmt = self.conn.prepare(query.as_str())?;
+        let count = stmt
+            .query_map(&*values.as_params(), |row| row.get(0))?
+            .next()
+            .unwrap_or(Ok(0))?;
         Ok(count)
     }
 
@@ -226,54 +206,46 @@ impl SqliteRepository {
         input: &UpdateIssueInput,
     ) -> anyhow::Result<Issue> {
         let now = Utc::now().to_rfc3339();
-        let mut sets = vec!["updated_at = ?1".to_string()];
-        let mut bind: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(now)];
-
-        macro_rules! push {
-            ($field:expr, $val:expr) => {{
-                let idx = bind.len() + 1;
-                sets.push(format!("{} = ?{idx}", $field));
-                bind.push(Box::new($val));
-            }};
-        }
+        let mut q = Query::update();
+        q.table(IssueIden::Table).value(IssueIden::UpdatedAt, now);
 
         if let Some(v) = &input.title {
-            push!("title", v.clone());
+            q.value(IssueIden::Title, v.clone());
         }
         if let Some(v) = &input.description {
-            push!("description", v.clone());
+            q.value(IssueIden::Description, v.clone());
         }
         if let Some(v) = input.status {
-            push!("status", v.label().to_string());
+            q.value(IssueIden::Status, v.label().to_string());
         }
         if let Some(v) = input.priority {
-            push!("priority", v.label().to_string());
+            q.value(IssueIden::Priority, v.label().to_string());
         }
         if let Some(v) = input.kind {
-            push!("kind", v.label().to_string());
+            q.value(IssueIden::Kind, v.label().to_string());
         }
         if let Some(v) = &input.assignee {
-            push!("assignee", v.clone());
+            q.value(IssueIden::Assignee, v.clone());
         }
+        // parent_id: outer None = don't touch, Some(None) = set NULL, Some(Some(x)) = set x
         if let Some(parent) = &input.parent_id {
             match parent {
-                Some(pid) => push!("parent_id", *pid),
-                None => {
-                    let idx = bind.len() + 1;
-                    sets.push(format!("parent_id = ?{idx}"));
-                    bind.push(Box::new(Option::<i64>::None));
-                }
-            }
+                Some(pid) => q.value(IssueIden::ParentId, *pid),
+                None => q.value(IssueIden::ParentId, Option::<i64>::None),
+            };
         }
 
-        let id_idx = bind.len() + 1;
-        let sql = format!("UPDATE issues SET {} WHERE id = ?{id_idx}", sets.join(", "));
-        bind.push(Box::new(id));
+        q.and_where(Expr::col(IssueIden::Id).eq(id))
+            .returning_col(IssueIden::Id);
 
-        let refs: Vec<&dyn rusqlite::ToSql> = bind.iter().map(|b| b.as_ref()).collect();
-        let changed = self.conn.execute(&sql, refs.as_slice())?;
-        if changed == 0 {
-            anyhow::bail!("issue {} not found", id);
+        let (sql, values) = q.build_rusqlite(SqliteQueryBuilder);
+        let result = self
+            .conn
+            .query_row(sql.as_str(), &*values.as_params(), |r| r.get::<_, i64>(0));
+        match result {
+            Ok(_) => {}
+            Err(rusqlite::Error::QueryReturnedNoRows) => anyhow::bail!("issue {} not found", id),
+            Err(e) => return Err(e.into()),
         }
 
         self.get_issue_impl(id)
@@ -281,46 +253,62 @@ impl SqliteRepository {
     }
 
     pub(crate) fn delete_issue_impl(&self, id: i64) -> anyhow::Result<()> {
-        let changed = self
+        let (sql, values) = Query::delete()
+            .from_table(IssueIden::Table)
+            .and_where(Expr::col(IssueIden::Id).eq(id))
+            .returning_col(IssueIden::Id)
+            .build_rusqlite(SqliteQueryBuilder);
+        let result = self
             .conn
-            .execute("DELETE FROM issues WHERE id = ?1", params![id])?;
-        if changed == 0 {
-            anyhow::bail!("issue {} not found", id);
+            .query_row(sql.as_str(), &*values.as_params(), |r| r.get::<_, i64>(0));
+        match result {
+            Ok(_) => Ok(()),
+            Err(rusqlite::Error::QueryReturnedNoRows) => anyhow::bail!("issue {} not found", id),
+            Err(e) => Err(e.into()),
         }
-        Ok(())
     }
 
     pub(crate) fn truncate_issues_impl(&self, statuses: &[Status]) -> anyhow::Result<u64> {
         if statuses.is_empty() {
+            // sea-query `is_in([])` generates invalid SQL; guard here.
             return Ok(0);
         }
-        let placeholders = statuses
-            .iter()
-            .enumerate()
-            .map(|(i, _)| format!("?{}", i + 1))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let sql = format!("DELETE FROM issues WHERE status IN ({placeholders})");
-        let bind: Vec<Box<dyn rusqlite::ToSql>> = statuses
-            .iter()
-            .map(|s| -> Box<dyn rusqlite::ToSql> { Box::new(s.label().to_string()) })
-            .collect();
-        let refs: Vec<&dyn rusqlite::ToSql> = bind.iter().map(|b| b.as_ref()).collect();
-        let changed = self.conn.execute(&sql, refs.as_slice())?;
+        let (sql, values) = Query::delete()
+            .from_table(IssueIden::Table)
+            .and_where(Expr::col(IssueIden::Status).is_in(statuses.iter().map(|s| s.label())))
+            .build_rusqlite(SqliteQueryBuilder);
+        let changed = self.conn.execute(sql.as_str(), &*values.as_params())?;
         Ok(changed as u64)
     }
 
     pub(crate) fn truncate_all_issues_impl(&self) -> anyhow::Result<u64> {
-        let changed = self.conn.execute("DELETE FROM issues", [])?;
+        let (sql, values) = Query::delete()
+            .from_table(IssueIden::Table)
+            .build_rusqlite(SqliteQueryBuilder);
+        let changed = self.conn.execute(sql.as_str(), &*values.as_params())?;
         Ok(changed as u64)
     }
 
     pub(crate) fn get_sub_issues_impl(&self, parent_id: i64) -> anyhow::Result<Vec<Issue>> {
-        let mut stmt = self.conn.prepare_cached(
-            "SELECT id, parent_id, title, description, status, priority, kind, assignee, created_at, updated_at
-             FROM issues WHERE parent_id = ?1 ORDER BY id ASC",
-        )?;
-        let rows = stmt.query_map(params![parent_id], row_to_issue)?;
+        let (sql, values) = Query::select()
+            .columns([
+                IssueIden::Id,
+                IssueIden::ParentId,
+                IssueIden::Title,
+                IssueIden::Description,
+                IssueIden::Status,
+                IssueIden::Priority,
+                IssueIden::Kind,
+                IssueIden::Assignee,
+                IssueIden::CreatedAt,
+                IssueIden::UpdatedAt,
+            ])
+            .from(IssueIden::Table)
+            .and_where(Expr::col(IssueIden::ParentId).eq(parent_id))
+            .order_by(IssueIden::Id, Order::Asc)
+            .build_rusqlite(SqliteQueryBuilder);
+        let mut stmt = self.conn.prepare_cached(sql.as_str())?;
+        let rows = stmt.query_map(&*values.as_params(), row_to_issue)?;
         let mut issues = Vec::new();
         for r in rows {
             let mut issue = r?;
@@ -332,18 +320,31 @@ impl SqliteRepository {
     }
 
     pub(crate) fn get_issue_label_names(&self, issue_id: i64) -> anyhow::Result<Vec<String>> {
-        let mut stmt = self.conn.prepare_cached(
-            "SELECT l.name FROM labels l JOIN issue_labels il ON il.label_id = l.id WHERE il.issue_id = ?1 ORDER BY l.name",
-        )?;
-        let rows = stmt.query_map(params![issue_id], |r| r.get(0))?;
+        let (sql, values) = Query::select()
+            .column(LabelIden::Name)
+            .from(LabelIden::Table)
+            .inner_join(
+                IssueLabelIden::Table,
+                Expr::col((LabelIden::Table, LabelIden::Id))
+                    .equals((IssueLabelIden::Table, IssueLabelIden::LabelId)),
+            )
+            .and_where(Expr::col((IssueLabelIden::Table, IssueLabelIden::IssueId)).eq(issue_id))
+            .order_by(LabelIden::Name, Order::Asc)
+            .build_rusqlite(SqliteQueryBuilder);
+        let mut stmt = self.conn.prepare_cached(sql.as_str())?;
+        let rows = stmt.query_map(&*values.as_params(), |r| r.get(0))?;
         Ok(rows.collect::<rusqlite::Result<Vec<String>>>()?)
     }
 
     pub(crate) fn get_issue_file_paths(&self, issue_id: i64) -> anyhow::Result<Vec<String>> {
-        let mut stmt = self
-            .conn
-            .prepare_cached("SELECT path FROM issue_files WHERE issue_id = ?1 ORDER BY path")?;
-        let rows = stmt.query_map(params![issue_id], |r| r.get(0))?;
+        let (sql, values) = Query::select()
+            .column(IssueFileIden::Path)
+            .from(IssueFileIden::Table)
+            .and_where(Expr::col(IssueFileIden::IssueId).eq(issue_id))
+            .order_by(IssueFileIden::Path, Order::Asc)
+            .build_rusqlite(SqliteQueryBuilder);
+        let mut stmt = self.conn.prepare_cached(sql.as_str())?;
+        let rows = stmt.query_map(&*values.as_params(), |r| r.get(0))?;
         Ok(rows.collect::<rusqlite::Result<Vec<String>>>()?)
     }
 
@@ -369,12 +370,12 @@ impl SqliteRepository {
 
         let mut map: HashMap<Status, Vec<Issue>> = HashMap::with_capacity(all_statuses.len());
         for status in &all_statuses {
-            let mut filter = crate::model::IssueFilter {
+            let filter = crate::model::IssueFilter {
                 status: Some(vec![*status]),
                 limit: Some(limit_per_status),
                 ..Default::default()
             };
-            let issues = self.list_issues_impl(&mut filter)?;
+            let issues = self.list_issues_impl(filter)?;
             map.insert(*status, issues);
         }
 
@@ -442,7 +443,7 @@ impl SqliteRepository {
 #[cfg(test)]
 mod tests {
     use super::super::{CreateIssueInput, SqliteRepository};
-    use crate::model::{Kind, Priority, Status};
+    use crate::model::{IssueFilter, Kind, Priority, Status};
 
     fn make_repo() -> SqliteRepository {
         SqliteRepository::open_in_memory().expect("in-memory db")
@@ -461,6 +462,92 @@ mod tests {
             files: vec![],
             actor: None,
         }
+    }
+
+    fn create_input_with_priority(
+        title: &str,
+        status: Status,
+        priority: Priority,
+    ) -> CreateIssueInput {
+        CreateIssueInput {
+            priority,
+            ..create_input(title, status)
+        }
+    }
+
+    /// `include_done: true` combined with a priority filter must:
+    /// - Return done issues that match the priority.
+    /// - Exclude issues of a different priority regardless of status.
+    /// - NOT apply the default `status != 'done'` exclusion.
+    #[test]
+    fn include_done_with_priority_filter() {
+        let repo = make_repo();
+
+        // High-priority done — should appear.
+        repo.create_issue_impl(&create_input_with_priority(
+            "done-high",
+            Status::Done,
+            Priority::High,
+        ))
+        .unwrap();
+        // High-priority todo — should also appear (include_done does not restrict non-done).
+        repo.create_issue_impl(&create_input_with_priority(
+            "todo-high",
+            Status::Todo,
+            Priority::High,
+        ))
+        .unwrap();
+        // Medium-priority done — must NOT appear (wrong priority).
+        repo.create_issue_impl(&create_input_with_priority(
+            "done-medium",
+            Status::Done,
+            Priority::Medium,
+        ))
+        .unwrap();
+        // Medium-priority todo — must NOT appear (wrong priority).
+        repo.create_issue_impl(&create_input_with_priority(
+            "todo-medium",
+            Status::Todo,
+            Priority::Medium,
+        ))
+        .unwrap();
+
+        let filter = IssueFilter {
+            include_done: true,
+            priority: Some(vec![Priority::High]),
+            ..Default::default()
+        };
+        let results = repo.list_issues_impl(filter).unwrap();
+
+        let titles: Vec<&str> = results.iter().map(|i| i.title.as_str()).collect();
+
+        assert_eq!(
+            results.len(),
+            2,
+            "expected exactly 2 high-priority issues; got: {:?}",
+            titles
+        );
+
+        // The done high-priority issue must be present (include_done is in effect).
+        assert!(
+            results
+                .iter()
+                .any(|i| i.title == "done-high" && i.status == Status::Done),
+            "done-high (Status::Done) should be included when include_done=true; got: {:?}",
+            titles
+        );
+        // The non-done high-priority issue must also be present.
+        assert!(
+            results.iter().any(|i| i.title == "todo-high"),
+            "todo-high should be included; got: {:?}",
+            titles
+        );
+        // No medium-priority issues should leak through.
+        assert!(
+            results.iter().all(|i| i.priority == Priority::High),
+            "all results must have High priority; got: {:?}",
+            titles
+        );
     }
 
     #[test]
@@ -490,7 +577,7 @@ mod tests {
 
         // Verify surviving issues have non-done status
         let all = repo
-            .list_issues_impl(&mut crate::model::IssueFilter {
+            .list_issues_impl(crate::model::IssueFilter {
                 findall: true,
                 ..Default::default()
             })
@@ -515,7 +602,7 @@ mod tests {
         assert_eq!(deleted, 0, "empty slice should delete nothing");
 
         let remaining = repo
-            .list_issues_impl(&mut crate::model::IssueFilter::all())
+            .list_issues_impl(crate::model::IssueFilter::all())
             .unwrap();
         assert_eq!(remaining.len(), 2, "all issues should remain");
     }
@@ -534,11 +621,11 @@ mod tests {
         let deleted = repo.truncate_issues_impl(&[Status::Done]).unwrap();
         assert_eq!(deleted, 5, "should return exact count of deleted rows");
 
-        let mut filter = crate::model::IssueFilter {
+        let filter = crate::model::IssueFilter {
             findall: true,
             ..Default::default()
         };
-        let remaining = repo.list_issues_impl(&mut filter).unwrap();
+        let remaining = repo.list_issues_impl(filter).unwrap();
         assert_eq!(remaining.len(), 1, "only the review issue should remain");
     }
 }

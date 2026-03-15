@@ -47,17 +47,22 @@ pub struct ListArgs {
 
 impl ListArgs {
     pub fn validate(&self) -> anyhow::Result<()> {
-        if self.all {
-            if !self.status.is_empty()
-                || !self.priority.is_empty()
-                || !self.kind.is_empty()
-                || self.assignee.is_some()
-                || !self.label.is_empty()
-                || self.parent.is_some()
-                || self.search.is_some()
-            {
-                println!("--all overrides all other filters: ignoring all filters and selecting all issues");
-            }
+        if self.all
+            && [
+                !self.status.is_empty(),
+                !self.priority.is_empty(),
+                !self.kind.is_empty(),
+                self.assignee.is_some(),
+                !self.label.is_empty(),
+                self.parent.is_some(),
+                self.search.is_some(),
+            ]
+            .iter()
+            .any(|&x| x)
+        {
+            println!(
+                "--all overrides all other filters: ignoring all filters and selecting all issues"
+            );
         }
         Ok(())
     }
@@ -75,7 +80,7 @@ pub fn run(args: &ListArgs, json: bool) -> anyhow::Result<()> {
         OutputMode::Human
     });
 
-    let mut filter = FilterBuilder {
+    let filter = FilterBuilder {
         statuses: args.status.clone(),
         priorities: args.priority.clone(),
         kinds: args.kind.clone(),
@@ -90,7 +95,7 @@ pub fn run(args: &ListArgs, json: bool) -> anyhow::Result<()> {
     }
     .build()?;
 
-    let issues = repo.list_issues(&mut filter)?;
+    let issues = repo.list_issues(filter)?;
     printer.print_issue_list(&issues);
     Ok(())
 }

@@ -39,10 +39,10 @@ pub trait Repository {
     fn get_issue(&self, id: i64) -> anyhow::Result<Option<Issue>>;
 
     /// Return all issues matching `filter`, in priority-descending, id-ascending order.
-    fn list_issues(&self, filter: &mut IssueFilter) -> anyhow::Result<Vec<Issue>>;
+    fn list_issues(&self, filter: IssueFilter) -> anyhow::Result<Vec<Issue>>;
 
     /// Return the count of issues matching `filter` without loading the rows.
-    fn count_issues(&self, filter: &mut IssueFilter) -> anyhow::Result<i64>;
+    fn count_issues(&self, filter: IssueFilter) -> anyhow::Result<i64>;
 
     /// Apply `input` fields to the issue with `id` and return the updated issue.
     fn update_issue(&self, id: i64, input: &UpdateIssueInput) -> anyhow::Result<Issue>;

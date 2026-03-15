@@ -3,7 +3,7 @@ use clap::Args;
 use crate::config::find_bmo_dir;
 use crate::db::{Repository, open_db};
 use crate::filter::FilterBuilder;
-use crate::model::{IssueFilter, Status};
+use crate::model::Status;
 use crate::output::{BoardColumns, OutputMode, make_printer};
 
 #[derive(Args)]
@@ -28,7 +28,7 @@ pub fn run(args: &BoardArgs, json: bool) -> anyhow::Result<()> {
         OutputMode::Human
     });
 
-    let mut filter = FilterBuilder {
+    let filter = FilterBuilder {
         priorities: args.priority.clone(),
         labels: args.label.clone(),
         assignee: args.assignee.clone(),
@@ -38,7 +38,7 @@ pub fn run(args: &BoardArgs, json: bool) -> anyhow::Result<()> {
     }
     .build()?;
 
-    let all_issues = repo.list_issues(&mut filter)?;
+    let all_issues = repo.list_issues(filter)?;
 
     let board = BoardColumns {
         backlog: all_issues

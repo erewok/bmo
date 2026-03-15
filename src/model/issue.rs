@@ -262,7 +262,21 @@ impl IssueFilter {
         }
     }
 
-    pub fn into_issue_query(&mut self) -> SelectStatement {
+    /// Consumes this filter and returns a sea-query [`SelectStatement`] for issues.
+    ///
+    /// # Pattern
+    /// `IssueFilter` owns all query-building logic for the issues table. `Repository`
+    /// implementations call `.build_rusqlite(SqliteQueryBuilder)` on the result — they
+    /// never construct raw SQL for issue queries directly. This keeps query logic
+    /// portable across backends.
+    ///
+    /// # Status decision tree
+    /// - `findall = true`: no status predicate; ORDER BY / LIMIT / OFFSET still applied.
+    /// - `status = Some(non-empty)`: `WHERE status IN (...)`.
+    /// - `status = Some(empty)`: `WHERE false` — returns an empty result set.
+    /// - `include_done = true`: no status predicate (done issues included).
+    /// - default: `WHERE status != 'done'`.
+    pub fn into_issue_query(mut self) -> SelectStatement {
         // Build a dynamic SQL query based on which filters are set.
         let mut binding = Query::select();
         let mut query = binding
@@ -280,11 +294,22 @@ impl IssueFilter {
             ])
             .from(IssueIden::Table);
 
-        if self.findall { // '--all'
+        if self.findall {
+            // '--all'
             return query.take();
             // No additional status filter needed, include all statuses
         } else if let Some(statuses) = &self.status {
-            query = query.and_where(Expr::col(IssueIden::Status).is_in(statuses.iter().map(|s| s.label())));
+            if !statuses.is_empty() {
+                query = query.and_where(
+                    Expr::col(IssueIden::Status).is_in(statuses.iter().map(|s| s.label())),
+                );
+            } else {
+                // Empty status vec means "match nothing" — caller explicitly requested an
+                // empty result set (e.g. a programmatic filter with no valid statuses).
+                query = query.and_where(Expr::val(false));
+            }
+        } else if self.include_done {
+            // include_done suppresses the default exclusion; no status WHERE clause applied
         } else {
             // By default, exclude done issues
             query = query.and_where(Expr::col(IssueIden::Status).ne("done"));
@@ -306,41 +331,41 @@ impl IssueFilter {
         query.apply_if(self.search.take(), |q, v| {
             q.cond_where(
                 Cond::any()
-                    .add(
-                        Expr::col(IssueIden::Title).like(format!("%{}%", v).as_str())
-                    )
-                    .add(
-                        Expr::col(IssueIden::Description).like(format!("%{}%", v).as_str())
-                    )
+                    .add(Expr::col(IssueIden::Title).like(format!("%{}%", v).as_str()))
+                    .add(Expr::col(IssueIden::Description).like(format!("%{}%", v).as_str())),
             );
         });
-        if self.labels.is_some() {
-            // Issues must have all specified labels.
-            // When filtering by labels, we need to join the issue_labels to labels table.
-            let labels = self.labels.as_ref().unwrap().iter().map(|s| s.as_str());
-            let labels_len = self.labels.as_ref().unwrap().len();
-            let mut binding = Query::select();
-            let subselect = binding
-                .expr(Expr::value(1))
-                .from(IssueLabelIden::Table)
-                .and_where(Expr::col(IssueLabelIden::IssueId).equals(IssueIden::Id))
-                .and_where(
-                    Expr::col(IssueLabelIden::LabelId).in_subquery(
-                    Query::select()
-                        .column(LabelIden::Id)
-                        .from(LabelIden::Table)
-                        .and_where(Expr::col(LabelIden::Name).is_in(labels))
-                        .take()
+        if let Some(labels) = self.labels {
+            // Issues must have ALL specified labels — one EXISTS subquery per label.
+            for label_name in labels {
+                let mut subselect = Query::select();
+                subselect
+                    .expr(Expr::val(1))
+                    .from(IssueLabelIden::Table)
+                    .inner_join(
+                        LabelIden::Table,
+                        Expr::col((LabelIden::Table, LabelIden::Id))
+                            .equals((IssueLabelIden::Table, IssueLabelIden::LabelId)),
                     )
-                );
-            query.expr_as(Expr::exists(subselect.take()), "label_match_count").take().gt(labels_len as i64 - 1);
+                    .and_where(
+                        Expr::col((IssueLabelIden::Table, IssueLabelIden::IssueId))
+                            .equals((IssueIden::Table, IssueIden::Id)),
+                    )
+                    .and_where(Expr::col((LabelIden::Table, LabelIden::Name)).eq(label_name));
+                query = query.and_where(Expr::exists(subselect));
+            }
         }
 
-        query = query.order_by(IssueIden::Priority, Order::Desc).order_by(IssueIden::Id, Order::Asc);
-        query.apply_if(self.limit, |q, v| { q.limit(v as u64); });
-        query.apply_if(self.offset, |q, v| { q.offset(v as u64); });
+        query = query
+            .order_by(IssueIden::Priority, Order::Desc)
+            .order_by(IssueIden::Id, Order::Asc);
+        query.apply_if(self.limit, |q, v| {
+            q.limit(v as u64);
+        });
+        query.apply_if(self.offset, |q, v| {
+            q.offset(v as u64);
+        });
         query.take()
-        // query.build_rusqlite(SqliteQueryBuilder)
     }
 }
 

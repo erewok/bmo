@@ -12,6 +12,9 @@ pub struct FilterBuilder {
     pub search: Option<String>,
     pub limit: usize,
     pub offset: usize,
+    /// When `true`, removes the default `status != 'done'` exclusion.
+    /// All other active filters (priority, kind, assignee, labels, etc.) remain in effect.
+    /// Distinct from `findall` which bypasses ALL predicates.
     pub include_done: bool,
     // --all is a short-circuit that ignores all other filters and selects all issues.
     pub findall: bool,

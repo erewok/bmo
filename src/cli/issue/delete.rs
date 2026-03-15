@@ -13,7 +13,6 @@ pub struct DeleteArgs {
     // /// List of IDs to delete (alternative to --id)
     // #[arg(long)]
     // pub ids: Vec<String>,
-
     /// Skip confirmation prompt
     #[arg(long)]
     pub yes: bool,

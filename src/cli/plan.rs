@@ -23,7 +23,7 @@ pub fn run(_args: &PlanArgs, json: bool) -> anyhow::Result<()> {
         OutputMode::Human
     });
 
-    let all_issues = repo.list_issues(&mut IssueFilter::all())?;
+    let all_issues = repo.list_issues(IssueFilter::default())?;
     let all_relations = repo.list_all_relations()?;
 
     let dag = Dag::build(&all_issues, &all_relations);

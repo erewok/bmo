@@ -15,7 +15,7 @@ pub fn run(args: &ExportArgs, _json: bool) -> anyhow::Result<()> {
     let bmo_dir = find_bmo_dir()?;
     let repo = open_db(&bmo_dir.join("issues.db"))?;
 
-    let all_issues = repo.list_issues(&mut crate::model::IssueFilter::all())?;
+    let all_issues = repo.list_issues(crate::model::IssueFilter::all())?;
     let all_relations = repo.list_all_relations()?;
     let all_labels = repo.list_all_labels()?;
     let project_name = repo
