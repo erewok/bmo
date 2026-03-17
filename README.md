@@ -8,6 +8,8 @@
 
 `bmo` is a local-first command-line issue tracker backed by a single SQLite file, designed for use by both human developers and AI agents operating in a terminal. It requires no server, no network dependency, and no external services. Issues are identified by `BMO-N` IDs.
 
+For an example of agents and skills that have been instructed to use `bmo` check out the [bmo-agent-setup project](https://github.com/erewok/bmo-agent-setup) (no need to run the program: the agents and skills are plain markdown files).
+
 ## Attribution
 
 `bmo` was inspired by and adapted from [docket](https://github.com/ALT-F4-LLC/docket), an issue tracker for AI agents written by **ALT-F4-LLC**. The design, data model, and command structure of BMO all owe a direct debt to that project, and all credit for the underlying ideas belongs there.
