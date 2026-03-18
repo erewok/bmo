@@ -195,6 +195,60 @@ async fn api_stats_ok() {
 }
 
 #[tokio::test]
+async fn issue_detail_page_renders_markdown() {
+    let (app, dir, _shutdown) = setup_app();
+
+    // Create an issue with markdown in the description
+    let db_path = dir.path().join("issues.db");
+    let repo = open_db(&db_path).unwrap();
+    let issue = repo
+        .create_issue(&CreateIssueInput {
+            parent_id: None,
+            title: "Markdown Test".to_string(),
+            description: "**Bold text** and _italic_".to_string(),
+            status: Status::Todo,
+            priority: Priority::Medium,
+            kind: Kind::Task,
+            assignee: None,
+            labels: vec![],
+            files: vec![],
+            actor: None,
+        })
+        .unwrap();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/issues/{}", issue.id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let html = std::str::from_utf8(&body).unwrap();
+
+    // This test guards against the markdown filter being de-registered or the
+    // `| markdown` pipe being removed from the template.
+    // Markdown should be rendered to HTML, not shown as raw text.
+    assert!(
+        html.contains("<strong>Bold text</strong>"),
+        "Expected <strong>Bold text</strong> in rendered HTML, but raw markdown may have been escaped"
+    );
+    assert!(
+        !html.contains("**Bold text**"),
+        "Raw markdown syntax should not appear in rendered HTML output"
+    );
+    assert!(html.contains("<em>italic</em>"), "Expected <em>italic</em> in rendered HTML");
+    assert!(!html.contains("_italic_"), "Raw markdown syntax should not appear in rendered HTML output");
+}
+
+#[tokio::test]
 async fn board_page_renders() {
     let (app, _dir, _shutdown) = setup_app();
 
