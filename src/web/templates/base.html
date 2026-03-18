@@ -193,17 +193,27 @@
        BOARD LAYOUT
        ============================================================ */
     .board {
-      display: flex;
-      gap: 14px;
-      overflow-x: auto;
-      align-items: flex-start;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+      gap: 12px;
+      overflow-x: hidden;
+      align-items: stretch;
       padding-bottom: 12px;
+      max-width: 1800px;
+      margin-inline: auto;
     }
 
     .column {
-      min-width: 250px;
-      max-width: 290px;
-      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: var(--surface);
+      border-radius: 8px;
+      padding: 8px;
+    }
+
+    ul.card-list {
       display: flex;
       flex-direction: column;
       gap: 8px;
@@ -236,10 +246,10 @@
        CARDS
        ============================================================ */
     .card {
-      background: var(--surface);
+      background: var(--surface-raised);
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 12px 14px;
+      padding: 14px 16px;
       box-shadow: var(--shadow-sm);
       transition: border-color var(--transition-base), box-shadow var(--transition-base), transform var(--transition-base);
       cursor: default;
@@ -259,10 +269,12 @@
     }
 
     .card-title {
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 500;
       margin: 5px 0 0;
       line-height: 1.45;
+      overflow-wrap: break-word;
+      word-break: break-word;
     }
 
     .card-title a {
@@ -279,18 +291,12 @@
     .card-meta {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
       margin-top: 10px;
       flex-wrap: wrap;
     }
 
-    .empty {
-      color: var(--text-subtle);
-      font-size: 12px;
-      text-align: center;
-      padding: 20px 0;
-      font-style: italic;
-    }
+
 
     /* ============================================================
        BADGES
@@ -369,7 +375,7 @@
        ISSUE DETAIL
        ============================================================ */
     .issue-detail {
-      max-width: 820px;
+      max-width: 860px;
     }
 
     .meta {
@@ -384,9 +390,9 @@
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 20px;
-      font-size: 13px;
-      line-height: 1.7;
+      padding: 24px;
+      font-size: 15px;
+      line-height: 1.75;
       margin: 18px 0;
       color: var(--text);
     }
@@ -478,8 +484,8 @@
       border-radius: 8px;
       padding: 14px 18px;
       margin-bottom: 10px;
-      font-size: 13px;
-      line-height: 1.6;
+      font-size: 14px;
+      line-height: 1.65;
       box-shadow: var(--shadow-sm);
       transition: border-color var(--transition-fast);
     }
@@ -544,6 +550,34 @@
     @media (prefers-color-scheme: light) {
       .btn-primary {
         color: #ffffff;
+      }
+    }
+
+    /* ============================================================
+       PAGE CONTAINER — centered content wrapper for non-board pages
+       ============================================================ */
+    .page-container {
+      max-width: 1400px;
+      margin-inline: auto;
+      width: 100%;
+    }
+
+    /* ============================================================
+       RESPONSIVE — narrow viewport fallback for board
+       ============================================================ */
+    @media (max-width: 1023px) {
+      .board {
+        overflow-x: auto;
+        grid-template-columns: repeat(5, minmax(200px, 1fr));
+      }
+    }
+
+    /* ============================================================
+       REDUCED MOTION
+       ============================================================ */
+    @media (prefers-reduced-motion: reduce) {
+      .column {
+        transition: none;
       }
     }
   </style>

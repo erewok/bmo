@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
+<div class="page-container">
 <div class="issue-detail">
   <h1>BMO-{{ issue.id }}: {{ issue.title }}</h1>
   <div class="meta" id="issue-meta">
@@ -43,6 +44,7 @@
       <button type="submit" id="comment-submit" class="btn btn-primary">Add Comment</button>
     </div>
   </form>
+</div>
 </div>
 
 <style>
