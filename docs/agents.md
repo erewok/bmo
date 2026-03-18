@@ -2,6 +2,14 @@
 
 `bmo` is built for agent-driven workflows. This page documents the recommended integration pattern.
 
+## Agents and Skills Coached to Use BMO
+
+For an example of agents and skills that have been instructed to use `bmo` check out the [bmo-agent-setup project](https://github.com/erewok/bmo-agent-setup) (no need to run the program: the agents and skills are plain markdown files).
+
+The sections below includes the kinds of commands we use in an agent or skill definition to prime the agents to use BMO for communication, work handoffs, or feedback on work.
+
+The commands below can be included for an agent definition (for a more thorough example see the [bmo-agent-setup project](https://github.com/erewok/bmo-agent-setup)).
+
 ## Session Initialization
 
 At the start of every session, run:

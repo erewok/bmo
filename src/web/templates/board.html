@@ -35,6 +35,19 @@
     0%, 100% { opacity: 1; }
     50%       { opacity: 0.4; }
   }
+
+  /* Card list semantic reset */
+  ul.card-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  ul.card-list li {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
 </style>
 
 <div class="live-indicator">
@@ -45,19 +58,24 @@
 <div class="board" id="board">
   {% for col in columns %}
   <div class="column" data-status="{{ col.status }}">
-    <div class="column-header">{{ col.label }} <span class="count">{{ col.issues | length }}</span></div>
-    {% for issue in col.issues %}
-    <div class="card">
-      <div class="card-id">BMO-{{ issue.id }}</div>
-      <div class="card-title"><a href="/issues/{{ issue.id }}">{{ issue.title }}</a></div>
-      <div class="card-meta">
-        <span class="badge priority-{{ issue.priority }}">{{ issue.priority }}</span>
-        <span class="badge kind-{{ issue.kind }}">{{ issue.kind }}</span>
-      </div>
+    <div class="column-header">
+      {{ col.label }}
+      <span class="count">{{ col.issues | length }}</span>
     </div>
-    {% else %}
-    <div class="empty">Empty</div>
+    <ul class="card-list" role="list">
+    {% for issue in col.issues %}
+    <li class="card-item">
+      <div class="card">
+        <div class="card-id">BMO-{{ issue.id }}</div>
+        <div class="card-title"><a href="/issues/{{ issue.id }}">{{ issue.title }}</a></div>
+        <div class="card-meta">
+          <span class="badge priority-{{ issue.priority }}">{{ issue.priority }}</span>
+          <span class="badge kind-{{ issue.kind }}">{{ issue.kind }}</span>
+        </div>
+      </div>
+    </li>
     {% endfor %}
+    </ul>
   </div>
   {% endfor %}
 </div>
@@ -96,15 +114,23 @@
   }
 
   function buildColumn(col) {
-    var cards = col.issues && col.issues.length
-      ? col.issues.map(buildCard).join('\n')
-      : '<div class="empty">Empty</div>';
+    var issueCount = col.issues ? col.issues.length : 0;
+
+    var listItems = issueCount > 0
+      ? col.issues.map(function (issue) {
+          return '<li class="card-item">\n' + buildCard(issue) + '\n</li>';
+        }).join('\n')
+      : '';
+
+    var cardList = '<ul class="card-list" role="list">\n' + listItems + '\n</ul>';
 
     return [
       '<div class="column" data-status="' + escapeHtml(col.status) + '">',
-      '  <div class="column-header">' + escapeHtml(col.label) +
-          ' <span class="count">' + escapeHtml(col.issues ? col.issues.length : 0) + '</span></div>',
-      cards,
+      '  <div class="column-header">',
+      '    ' + escapeHtml(col.label),
+      '    <span class="count">' + issueCount + '</span>',
+      '  </div>',
+      cardList,
       '</div>'
     ].join('\n');
   }
