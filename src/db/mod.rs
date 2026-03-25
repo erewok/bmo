@@ -6,7 +6,9 @@
 pub mod schema;
 
 mod activity;
+mod claim;
 mod comments;
+mod file_conflicts;
 mod files;
 mod impl_repo;
 mod issues;
@@ -19,8 +21,8 @@ use rusqlite::Connection;
 
 use crate::model::activity::NewActivityEntry;
 use crate::model::{
-    ActivityEntry, Comment, Issue, IssueFile, IssueFilter, Kind, Label, Priority, Relation,
-    RelationKind, Status,
+    ActivityEntry, Comment, FileConflict, Issue, IssueFile, IssueFilter, Kind, Label, Priority,
+    Relation, RelationKind, Status,
 };
 
 // ── Repository trait ──────────────────────────────────────────────────────────
@@ -129,6 +131,15 @@ pub trait Repository {
     /// Return all files attached to `issue_id`.
     fn list_files(&self, issue_id: i64) -> anyhow::Result<Vec<IssueFile>>;
 
+    /// Return all files attached to `issue_id` that are also attached to at
+    /// least one other in-progress issue, grouped by file path.
+    fn list_file_conflicts(&self, issue_id: i64) -> anyhow::Result<Vec<FileConflict>>;
+
+    /// Atomically claim an issue by setting its status to `in-progress` and
+    /// optionally assigning it. Returns `BmoError::Conflict` if already in-progress,
+    /// `BmoError::NotFound` if the issue does not exist.
+    fn claim_issue(&self, input: &ClaimIssueInput) -> anyhow::Result<Issue>;
+
     // Meta
 
     /// Retrieve the string value stored under `key`, if any.
@@ -195,6 +206,13 @@ pub struct AddCommentInput {
     pub issue_id: i64,
     pub body: String,
     pub author: Option<String>,
+}
+
+/// Input for claiming (moving to in-progress) an issue, optionally assigning it.
+#[derive(Debug)]
+pub struct ClaimIssueInput {
+    pub issue_id: i64,
+    pub assignee: Option<String>,
 }
 
 // ── Stats ─────────────────────────────────────────────────────────────────────

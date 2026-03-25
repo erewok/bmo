@@ -208,19 +208,29 @@ bmo next --assignee alice --limit 5 --json
 Show a phased execution plan derived from issue dependency relationships. Issues are grouped into
 phases where each phase contains issues that can be worked in parallel.
 
-**Synopsis:** `bmo plan [--assignee <name>]`
+**Synopsis:** `bmo plan [--assignee <name>] [--phase <n>]`
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `-a, --assignee <name>` | string | (none) | Filter plan to this assignee |
+| `--phase <n>` | integer | (none) | Return only the issues in phase N as a flat array |
 
-**Example:**
+When `--phase` is given, the `data` field is a plain array of issue objects (not the full plan
+envelope), suitable for a coordinator to iterate and dispatch. An out-of-range phase number
+returns a `validation` error (exit 3).
+
+When `--assignee` and `--phase` are both given, the assignee filter is applied first, then
+phase N is extracted. An empty result is not an error.
+
+**Examples:**
 
 ```
 bmo plan --json
+bmo plan --phase 1 --json
+bmo plan --phase 2 --assignee alice --json
 ```
 
-**JSON output** (`data` field):
+**JSON output** (`data` field, without `--phase`):
 
 ```json
 {
@@ -232,6 +242,21 @@ bmo plan --json
     ...
   ]
 }
+```
+
+**JSON output** (`data` field, with `--phase N`): flat array of issue objects.
+
+```json
+[
+  {"id": 3, "title": "...", "status": "todo", ...},
+  {"id": 5, "title": "...", "status": "todo", ...}
+]
+```
+
+Out-of-range phase error (exit 3):
+
+```json
+{"ok": false, "code": "validation", "error": "phase 5 does not exist (plan has 3 phases)"}
 ```
 
 ## bmo export
@@ -511,6 +536,43 @@ bmo issue reopen BMO-5
 ```
 
 **JSON output** (`data` field): the updated issue object.
+
+### bmo issue claim
+
+Atomically claim an issue: sets status to `in-progress` and optionally records an assignee
+in a single conditional SQL UPDATE. If another agent has already claimed the ticket, returns
+a `conflict` error rather than overwriting.
+
+**Synopsis:** `bmo issue claim <id> [--assignee <name>]`
+
+| Argument/Flag | Type | Default | Description |
+|---------------|------|---------|-------------|
+| `<id>` | positional (required) | | Issue ID |
+| `-a, --assignee <name>` | string | (none) | Assignee name to record |
+
+**Exit codes:**
+
+| Code | Meaning |
+|------|---------|
+| `0` | Claimed successfully |
+| `2` | Issue not found |
+| `4` | Issue is already in-progress (conflict) |
+
+**Examples:**
+
+```
+bmo issue claim BMO-7
+bmo issue claim BMO-7 --assignee alice --json
+```
+
+**JSON output (`data` field):** the updated issue object.
+
+When the claimed issue shares file attachments with another in-progress issue, the response
+includes a top-level `"file_conflicts"` key (alongside `ok`, `data`, `message`):
+
+```json
+{"ok": true, "data": <issue>, "message": "Claimed BMO-7.", "file_conflicts": [...]}
+```
 
 ### bmo issue delete
 
@@ -810,3 +872,36 @@ bmo issue file list BMO-3 --json
 ```
 
 **JSON output** (`data` field): array of file attachment objects.
+
+### bmo issue file conflicts
+
+Show file conflicts: other in-progress issues that share one or more file attachments with
+the given issue.
+
+**Synopsis:** `bmo issue file conflicts <id>`
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `<id>` | positional (required) | Issue ID |
+
+Exit code is always `0` — conflict presence is information, not an error.
+
+**Example:**
+
+```
+bmo issue file conflicts BMO-7
+bmo issue file conflicts BMO-7 --json
+```
+
+**JSON output** (`data` field): array of conflict objects, empty array when no conflicts.
+
+```json
+[
+  {
+    "file": "src/auth.rs",
+    "conflicts_with": [
+      {"id": 12, "title": "Refactor auth middleware", "status": "in-progress"}
+    ]
+  }
+]
+```

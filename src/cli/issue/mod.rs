@@ -1,5 +1,6 @@
 use clap::Subcommand;
 
+pub mod claim;
 pub mod close;
 pub mod comment;
 pub mod create;
@@ -17,6 +18,8 @@ pub mod show;
 
 #[derive(Subcommand)]
 pub enum IssueCommands {
+    /// Atomically claim an issue (sets status=in-progress and assignee)
+    Claim(claim::ClaimArgs),
     /// Create a new issue
     Create(create::CreateArgs),
     /// List issues
