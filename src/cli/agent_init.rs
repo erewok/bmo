@@ -11,9 +11,6 @@ pub struct AgentInitArgs {}
 
 pub const CHEAT_SHEET: &str = r#"## BMO Quick Reference
 
-### Session Start
-  bmo agent-init          # this command — run once per session
-
 ### Claiming & Working Issues
   bmo issue claim BMO-N [--assignee <name>]  # atomically claim a ticket (exits 4 if already claimed)
   bmo issue show  BMO-N --json               # full details + comments
@@ -23,15 +20,14 @@ pub const CHEAT_SHEET: &str = r#"## BMO Quick Reference
   bmo issue close BMO-N                      # mark done
 
 ### Planning & Discovery
+  bmo agent-init --json                      # refresh board state (run once per session)
   bmo next --json                            # work-ready issues (no unresolved blockers)
   bmo plan --phase 1 --json                  # all issues in phase 1 (iterate phases 1..N)
   bmo board --json                           # full kanban overview
 
-### JSON Parsing (prefer jq, fall back to Python)
+### JSON Parsing
   bmo next --json | jq '.data[] | {id: .id, title: .title}'
-  bmo issue show BMO-7 --json | jq '.data.issue.status'
-  bmo board --json | jq '.data.in_progress[].id'
-  # Fallback: bmo next --json | python3 -c "import sys,json; d=json.load(sys.stdin); ..."
+  bmo issue comment list BMO-N --json | jq '.data[] | select(.body | startswith("HANDOFF:")) | .body'
 
 ### Comment Tags (prefix every agent comment with the appropriate tag)
   BLOCKER:    — work cannot proceed without resolution (any agent)
@@ -42,11 +38,7 @@ pub const CHEAT_SHEET: &str = r#"## BMO Quick Reference
   VERIFIED:   — acceptance criteria confirmed passing (qa-engineer)
   FINDING:    — information discovered during implementation (senior-engineer)
   DECISION:   — approach chosen and rationale (senior-engineer)
-  HANDOFF:    — work complete, context for the next agent (any agent)
-
-### Scan Comments by Tag
-  bmo issue comment list BMO-7 --json | jq '.data[] | select(.body | startswith("HANDOFF:")) | .body'
-  bmo issue comment list BMO-7 --json | jq '.data[] | select(.body | startswith("BLOCKER:")) | .body'"#;
+  HANDOFF:    — work complete, context for the next agent (any agent)"#;
 
 pub fn run(_args: &AgentInitArgs, json: bool) -> anyhow::Result<()> {
     // ── Collect phase: run all sub-operations, fail fast on error ────────────

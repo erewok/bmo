@@ -1,7 +1,9 @@
 use chrono::Utc;
+use sea_query::{Expr, ExprTrait, Query, SqliteQueryBuilder};
+use sea_query_rusqlite::RusqliteBinder;
 
 use crate::errors::BmoError;
-use crate::model::{Issue, Status};
+use crate::model::{Issue, IssueIden, Status};
 
 use super::{ClaimIssueInput, SqliteRepository};
 
@@ -9,11 +11,15 @@ impl SqliteRepository {
     pub(crate) fn claim_issue_impl(&self, input: &ClaimIssueInput) -> anyhow::Result<Issue> {
         let now = Utc::now().to_rfc3339();
 
-        let rows_affected = self.conn.execute(
-            "UPDATE issues SET status = 'in-progress', assignee = ?1, updated_at = ?2 \
-             WHERE id = ?3 AND status != 'in-progress'",
-            rusqlite::params![input.assignee, now, input.issue_id],
-        )?;
+        let (sql, values) = Query::update()
+            .table(IssueIden::Table)
+            .value(IssueIden::Status, Status::InProgress.label())
+            .value(IssueIden::Assignee, input.assignee.clone())
+            .value(IssueIden::UpdatedAt, now)
+            .and_where(Expr::col(IssueIden::Id).eq(input.issue_id))
+            .and_where(Expr::col(IssueIden::Status).is_not_in([Status::InProgress.label()]))
+            .build_rusqlite(SqliteQueryBuilder);
+        let rows_affected = self.conn.execute(sql.as_str(), &*values.as_params())?;
 
         if rows_affected == 1 {
             let issue = self
