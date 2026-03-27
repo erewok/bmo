@@ -4,8 +4,8 @@ _default:
     just --list
 
 # Run all tests
-test:
-    cargo test
+test *args:
+    cargo nextest run --failure-output=immediate {{args}}
 
 # Check formatting and run clippy
 check:
