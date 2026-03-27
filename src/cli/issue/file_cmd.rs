@@ -13,6 +13,8 @@ pub enum FileCommands {
     Rm(RmArgs),
     /// List file attachments
     List(ListArgs),
+    /// Show file conflicts with other in-progress issues
+    Conflicts(ConflictsArgs),
 }
 
 #[derive(Args)]
@@ -33,6 +35,12 @@ pub struct RmArgs {
 
 #[derive(Args)]
 pub struct ListArgs {
+    /// Issue ID
+    pub id: String,
+}
+
+#[derive(Args)]
+pub struct ConflictsArgs {
     /// Issue ID
     pub id: String,
 }
@@ -84,6 +92,30 @@ pub fn run_list(args: &ListArgs, json: bool) -> anyhow::Result<()> {
     } else {
         for f in &files {
             println!("{}", f.path);
+        }
+    }
+    Ok(())
+}
+
+pub fn run_conflicts(args: &ConflictsArgs, json: bool) -> anyhow::Result<()> {
+    let bmo_dir = find_bmo_dir()?;
+    let repo = open_db(&bmo_dir.join("issues.db"))?;
+
+    let issue_id = parse_id(&args.id)?;
+    let conflicts = repo.list_file_conflicts(issue_id)?;
+
+    if json {
+        let total_conflicts: usize = conflicts.iter().map(|c| c.conflicts_with.len()).sum();
+        let envelope = serde_json::json!({ "ok": true, "data": conflicts, "message": format!("{} conflict(s)", total_conflicts) });
+        println!("{}", serde_json::to_string_pretty(&envelope)?);
+    } else if conflicts.is_empty() {
+        println!("No conflicts.");
+    } else {
+        println!("File conflicts for BMO-{}:", issue_id);
+        for c in &conflicts {
+            for other in &c.conflicts_with {
+                println!("  {}  →  BMO-{} ({})", c.file, other.id, other.title);
+            }
         }
     }
     Ok(())

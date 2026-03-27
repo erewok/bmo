@@ -5,6 +5,7 @@ use crate::db::{Repository, open_db};
 use crate::model::IssueFilter;
 use crate::output::{OutputMode, make_printer};
 use crate::planner::dag::{Dag, find_ready};
+use crate::planner::topo::topological_levels;
 
 #[derive(Args)]
 pub struct NextArgs {
@@ -29,6 +30,7 @@ pub fn run(args: &NextArgs, json: bool) -> anyhow::Result<()> {
     let all_relations = repo.list_all_relations()?;
 
     let dag = Dag::build(&all_issues, &all_relations);
+    topological_levels(&dag)?;
     let ready: Vec<_> = find_ready(&dag)
         .into_iter()
         .filter(|i| {

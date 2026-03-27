@@ -244,8 +244,14 @@ async fn issue_detail_page_renders_markdown() {
         !html.contains("**Bold text**"),
         "Raw markdown syntax should not appear in rendered HTML output"
     );
-    assert!(html.contains("<em>italic</em>"), "Expected <em>italic</em> in rendered HTML");
-    assert!(!html.contains("_italic_"), "Raw markdown syntax should not appear in rendered HTML output");
+    assert!(
+        html.contains("<em>italic</em>"),
+        "Expected <em>italic</em> in rendered HTML"
+    );
+    assert!(
+        !html.contains("_italic_"),
+        "Raw markdown syntax should not appear in rendered HTML output"
+    );
 }
 
 #[tokio::test]

@@ -1,5 +1,6 @@
 use clap::{Parser, Subcommand};
 
+pub mod agent_init;
 pub mod board;
 pub mod config;
 pub mod export;
@@ -52,6 +53,8 @@ pub enum Commands {
     Web(web::WebArgs),
     /// Delete issues in bulk
     Truncate(truncate::TruncateArgs),
+    /// One-shot session orientation: init + board + next + stats + cheat sheet
+    AgentInit(agent_init::AgentInitArgs),
     /// Manage issues
     #[command(subcommand)]
     Issue(issue::IssueCommands),

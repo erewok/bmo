@@ -2,6 +2,7 @@
 
 pub mod activity;
 pub mod comment;
+pub mod conflict;
 pub mod export;
 pub mod file;
 pub mod issue;
@@ -10,6 +11,7 @@ pub mod relation;
 
 pub use activity::{ActivityEntry, ActivityEntryIden};
 pub use comment::{Comment, CommentIden};
+pub use conflict::{ConflictingIssue, FileConflict};
 pub use file::{IssueFile, IssueFileIden};
 pub use issue::{Issue, IssueFilter, IssueIden, Kind, Priority, Status};
 pub use label::{Label, LabelIden};

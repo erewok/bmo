@@ -128,6 +128,20 @@ impl Repository for SqliteRepository {
         self.list_files_impl(issue_id)
     }
 
+    fn list_file_conflicts(
+        &self,
+        issue_id: i64,
+    ) -> anyhow::Result<Vec<crate::model::FileConflict>> {
+        self.list_file_conflicts_impl(issue_id)
+    }
+
+    fn claim_issue(
+        &self,
+        input: &crate::db::ClaimIssueInput,
+    ) -> anyhow::Result<crate::model::Issue> {
+        self.claim_issue_impl(input)
+    }
+
     fn get_meta(&self, key: &str) -> anyhow::Result<Option<String>> {
         let (sql, values) = Query::select()
             .column(Meta::Value)

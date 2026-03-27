@@ -53,12 +53,14 @@ fn dispatch(command: Commands, json: bool, db: Option<String>) -> anyhow::Result
         Commands::Plan(args) => cli::plan::run(&args, json),
         Commands::Web(args) => cli::web::run(&args, json, db),
         Commands::Truncate(args) => cli::truncate::run(&args, json, db),
+        Commands::AgentInit(args) => cli::agent_init::run(&args, json),
         Commands::Issue(sub) => dispatch_issue(sub, json),
     }
 }
 
 fn dispatch_issue(command: IssueCommands, json: bool) -> anyhow::Result<()> {
     match command {
+        IssueCommands::Claim(args) => cli::issue::claim::run(&args, json),
         IssueCommands::Create(args) => cli::issue::create::run(&args, json),
         IssueCommands::List(args) => cli::issue::list::run(&args, json),
         IssueCommands::Show(args) => cli::issue::show::run(&args, json),
@@ -88,6 +90,7 @@ fn dispatch_issue(command: IssueCommands, json: bool) -> anyhow::Result<()> {
             FileCommands::Add(args) => cli::issue::file_cmd::run_add(&args, json),
             FileCommands::Rm(args) => cli::issue::file_cmd::run_rm(&args, json),
             FileCommands::List(args) => cli::issue::file_cmd::run_list(&args, json),
+            FileCommands::Conflicts(args) => cli::issue::file_cmd::run_conflicts(&args, json),
         },
     }
 }
