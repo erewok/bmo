@@ -36,7 +36,7 @@ bmo stats         # summary of issue counts by status
 When acting as a coordinator, use `bmo plan` to iterate over phases and dispatch work to sub-agents:
 
 ```bash
-# Plan planning shows the phases.
+# The plan output shows the phases.
 ❯ bmo plan --json
 {
   "data": {

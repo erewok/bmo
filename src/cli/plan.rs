@@ -10,11 +10,12 @@ use crate::planner::plan::generate_plan;
 
 #[derive(Args)]
 pub struct PlanArgs {
-    /// Filter by assignee
+    /// Filter by assignee (requires --phase)
     #[arg(short, long)]
     pub assignee: Option<String>,
 
-    /// Show only the issues in phase N (returns a flat array, not the full plan envelope)
+    /// Show only the issues in phase N. In --json mode returns a flat array, not the full plan
+    /// envelope; in human mode prints a header plus a formatted list.
     #[arg(long)]
     pub phase: Option<u32>,
 }

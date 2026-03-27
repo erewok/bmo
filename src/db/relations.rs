@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashSet, VecDeque};
 
 use sea_query::{Alias, Cond, Expr, ExprTrait, Query, SqliteQueryBuilder};
 use sea_query_rusqlite::{RusqliteBinder, rusqlite};
@@ -17,39 +17,66 @@ fn relation_col() -> Alias {
 impl SqliteRepository {
     /// Returns true if `target` is reachable from `start` by following DAG forward edges
     /// (Blocks: from→to, DependsOn: to→from) in the currently stored relations.
+    ///
+    /// Uses per-node DB queries during BFS so only traversed edges are loaded, keeping
+    /// each `add_relation_impl` call efficient even as the graph grows.
     fn can_reach_impl(&self, start: i64, target: i64) -> anyhow::Result<bool> {
         if start == target {
             return Ok(true);
         }
-        let relations = self.list_all_relations_impl()?;
-        let mut forward: HashMap<i64, Vec<i64>> = HashMap::new();
-        for rel in &relations {
-            match rel.kind {
-                RelationKind::Blocks => {
-                    forward.entry(rel.from_id).or_default().push(rel.to_id);
-                }
-                RelationKind::DependsOn => {
-                    // A depends-on B means B→A in the DAG
-                    forward.entry(rel.to_id).or_default().push(rel.from_id);
-                }
-                _ => {}
-            }
-        }
+
         let mut visited = HashSet::new();
         let mut queue = VecDeque::new();
         queue.push_back(start);
+
         while let Some(current) = queue.pop_front() {
             if !visited.insert(current) {
                 continue;
             }
-            if let Some(neighbors) = forward.get(&current) {
-                for &next in neighbors {
-                    if next == target {
-                        return Ok(true);
-                    }
-                    if !visited.contains(&next) {
-                        queue.push_back(next);
-                    }
+
+            // Query only DAG neighbors of `current`:
+            //   Blocks(current, X)    → forward neighbor X  (from_id = current)
+            //   DependsOn(X, current) → forward neighbor X  (to_id   = current)
+            let (sql, values) = Query::select()
+                .column(RelationIden::FromId)
+                .column(RelationIden::ToId)
+                .column(relation_col())
+                .from(RelationIden::Table)
+                .cond_where(
+                    Cond::any()
+                        .add(
+                            Cond::all()
+                                .add(Expr::col(relation_col()).eq(RelationKind::Blocks.label()))
+                                .add(Expr::col(RelationIden::FromId).eq(current)),
+                        )
+                        .add(
+                            Cond::all()
+                                .add(Expr::col(relation_col()).eq(RelationKind::DependsOn.label()))
+                                .add(Expr::col(RelationIden::ToId).eq(current)),
+                        ),
+                )
+                .build_rusqlite(SqliteQueryBuilder);
+
+            let mut stmt = self.conn.prepare_cached(sql.as_str())?;
+            let rows = stmt.query_map(&*values.as_params(), |r| {
+                let from_id: i64 = r.get(0)?;
+                let to_id: i64 = r.get(1)?;
+                let kind_str: String = r.get(2)?;
+                Ok((from_id, to_id, kind_str))
+            })?;
+
+            for row in rows {
+                let (from_id, to_id, kind_str) = row?;
+                let next = match kind_str.as_str() {
+                    k if k == RelationKind::Blocks.label() => to_id,
+                    k if k == RelationKind::DependsOn.label() => from_id,
+                    _ => continue,
+                };
+                if next == target {
+                    return Ok(true);
+                }
+                if !visited.contains(&next) {
+                    queue.push_back(next);
                 }
             }
         }

@@ -15,8 +15,7 @@ impl SqliteRepository {
             SELECT
                 f1.path        AS file,
                 i.id           AS conflict_id,
-                i.title        AS conflict_title,
-                i.status       AS conflict_status
+                i.title        AS conflict_title
             FROM issue_files f1
             JOIN issue_files f2
                 ON  f2.path     = f1.path
@@ -36,7 +35,6 @@ impl SqliteRepository {
                     r.get::<_, String>(0)?, // file
                     r.get::<_, i64>(1)?,    // conflict_id
                     r.get::<_, String>(2)?, // conflict_title
-                    r.get::<_, String>(3)?, // conflict_status
                 ))
             },
         )?;
@@ -44,9 +42,13 @@ impl SqliteRepository {
         // Collect flat rows and group by file path.
         let mut result: Vec<FileConflict> = Vec::new();
         for row in rows {
-            let (file, id, title, status_str) = row?;
-            let status = status_str.parse::<Status>().unwrap_or(Status::InProgress);
-            let issue = ConflictingIssue { id, title, status };
+            let (file, id, title) = row?;
+            // SQL already filters to in-progress; use the type directly.
+            let issue = ConflictingIssue {
+                id,
+                title,
+                status: Status::InProgress,
+            };
             if let Some(last) = result.last_mut()
                 && last.file == file
             {
