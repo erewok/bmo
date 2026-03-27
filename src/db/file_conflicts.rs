@@ -2,8 +2,6 @@
 // board_snapshot_stats_impl.  sea-query does not support self-JOINs with
 // table aliases cleanly, so we drop down to a prepared statement.
 
-use rusqlite;
-
 use crate::model::{ConflictingIssue, FileConflict, Status};
 
 use super::SqliteRepository;

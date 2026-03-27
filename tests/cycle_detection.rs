@@ -196,14 +196,7 @@ fn link_add_allows_non_dag_edges() {
 
         let (fi, rel, ti) = case.allowed_link;
         bmo(&dir)
-            .args([
-                "issue",
-                "link",
-                "add",
-                &ids[fi - 1],
-                rel,
-                &ids[ti - 1],
-            ])
+            .args(["issue", "link", "add", &ids[fi - 1], rel, &ids[ti - 1]])
             .assert()
             .success();
     }

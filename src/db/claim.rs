@@ -27,14 +27,12 @@ impl SqliteRepository {
         let rows_affected = self.conn.execute(sql.as_str(), &*values.as_params())?;
 
         if rows_affected == 1 {
-            let issue = self
-                .get_issue_impl(input.issue_id)?
-                .ok_or_else(|| {
-                    BmoError::Db(format!(
-                        "unexpected state: issue {} missing after successful UPDATE",
-                        input.issue_id
-                    ))
-                })?;
+            let issue = self.get_issue_impl(input.issue_id)?.ok_or_else(|| {
+                BmoError::Db(format!(
+                    "unexpected state: issue {} missing after successful UPDATE",
+                    input.issue_id
+                ))
+            })?;
             return Ok(issue);
         }
 
