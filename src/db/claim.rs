@@ -11,20 +11,30 @@ impl SqliteRepository {
     pub(crate) fn claim_issue_impl(&self, input: &ClaimIssueInput) -> anyhow::Result<Issue> {
         let now = Utc::now().to_rfc3339();
 
-        let (sql, values) = Query::update()
+        let mut query = Query::update();
+        query
             .table(IssueIden::Table)
             .value(IssueIden::Status, Status::InProgress.label())
-            .value(IssueIden::Assignee, input.assignee.clone())
             .value(IssueIden::UpdatedAt, now)
             .and_where(Expr::col(IssueIden::Id).eq(input.issue_id))
-            .and_where(Expr::col(IssueIden::Status).is_not_in([Status::InProgress.label()]))
-            .build_rusqlite(SqliteQueryBuilder);
+            .and_where(Expr::col(IssueIden::Status).is_not_in([Status::InProgress.label()]));
+
+        if let Some(assignee) = &input.assignee {
+            query.value(IssueIden::Assignee, Some(assignee.clone()));
+        }
+
+        let (sql, values) = query.build_rusqlite(SqliteQueryBuilder);
         let rows_affected = self.conn.execute(sql.as_str(), &*values.as_params())?;
 
         if rows_affected == 1 {
             let issue = self
                 .get_issue_impl(input.issue_id)?
-                .expect("issue must exist after successful UPDATE");
+                .ok_or_else(|| {
+                    BmoError::Db(format!(
+                        "unexpected state: issue {} missing after successful UPDATE",
+                        input.issue_id
+                    ))
+                })?;
             return Ok(issue);
         }
 
@@ -137,6 +147,42 @@ mod tests {
             matches!(bmo_err, BmoError::NotFound(_)),
             "expected NotFound, got {:?}",
             bmo_err
+        );
+    }
+
+    #[test]
+    fn claim_without_assignee_preserves_existing_assignee() {
+        let repo = make_repo_in_memory();
+
+        // Create a todo issue with a pre-set assignee
+        let issue = repo
+            .create_issue_impl(&CreateIssueInput {
+                parent_id: None,
+                title: "Test issue with assignee".into(),
+                description: "desc".into(),
+                status: Status::Todo,
+                priority: Priority::Medium,
+                kind: Kind::Task,
+                assignee: Some("alice".into()),
+                labels: vec![],
+                files: vec![],
+                actor: None,
+            })
+            .expect("create issue");
+
+        // Claim without providing an assignee — existing assignee should be preserved
+        let claimed = repo
+            .claim_issue_impl(&ClaimIssueInput {
+                issue_id: issue.id,
+                assignee: None,
+            })
+            .expect("claim should succeed");
+
+        assert_eq!(claimed.status, Status::InProgress);
+        assert_eq!(
+            claimed.assignee.as_deref(),
+            Some("alice"),
+            "existing assignee should not be cleared when None is passed"
         );
     }
 

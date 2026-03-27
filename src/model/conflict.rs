@@ -1,5 +1,7 @@
 use serde::Serialize;
 
+use super::Status;
+
 /// Represents a file that is attached to more than one active issue,
 /// along with the set of issues that share it.
 #[derive(Debug, Serialize)]
@@ -13,5 +15,5 @@ pub struct FileConflict {
 pub struct ConflictingIssue {
     pub id: i64,
     pub title: String,
-    pub status: String,
+    pub status: Status,
 }

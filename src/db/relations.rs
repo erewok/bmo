@@ -1,6 +1,9 @@
+use std::collections::{HashMap, HashSet, VecDeque};
+
 use sea_query::{Alias, Cond, Expr, ExprTrait, Query, SqliteQueryBuilder};
 use sea_query_rusqlite::{RusqliteBinder, rusqlite};
 
+use crate::errors::BmoError;
 use crate::model::{Relation, RelationIden, RelationKind};
 
 use super::SqliteRepository;
@@ -12,12 +15,70 @@ fn relation_col() -> Alias {
 }
 
 impl SqliteRepository {
+    /// Returns true if `target` is reachable from `start` by following DAG forward edges
+    /// (Blocks: from→to, DependsOn: to→from) in the currently stored relations.
+    fn can_reach_impl(&self, start: i64, target: i64) -> anyhow::Result<bool> {
+        if start == target {
+            return Ok(true);
+        }
+        let relations = self.list_all_relations_impl()?;
+        let mut forward: HashMap<i64, Vec<i64>> = HashMap::new();
+        for rel in &relations {
+            match rel.kind {
+                RelationKind::Blocks => {
+                    forward.entry(rel.from_id).or_default().push(rel.to_id);
+                }
+                RelationKind::DependsOn => {
+                    // A depends-on B means B→A in the DAG
+                    forward.entry(rel.to_id).or_default().push(rel.from_id);
+                }
+                _ => {}
+            }
+        }
+        let mut visited = HashSet::new();
+        let mut queue = VecDeque::new();
+        queue.push_back(start);
+        while let Some(current) = queue.pop_front() {
+            if !visited.insert(current) {
+                continue;
+            }
+            if let Some(neighbors) = forward.get(&current) {
+                for &next in neighbors {
+                    if next == target {
+                        return Ok(true);
+                    }
+                    if !visited.contains(&next) {
+                        queue.push_back(next);
+                    }
+                }
+            }
+        }
+        Ok(false)
+    }
+
     pub(crate) fn add_relation_impl(
         &self,
         from_id: i64,
         kind: RelationKind,
         to_id: i64,
     ) -> anyhow::Result<Relation> {
+        // Cycle check: reject any DAG edge that would create a cycle.
+        // Blocks(A, B) adds DAG edge A→B; a cycle exists if B can already reach A.
+        // DependsOn(A, B) adds DAG edge B→A; a cycle exists if A can already reach B.
+        if kind.is_dag_edge() {
+            let (dag_from, dag_to) = match kind {
+                RelationKind::Blocks => (from_id, to_id),
+                RelationKind::DependsOn => (to_id, from_id),
+                _ => unreachable!(),
+            };
+            if self.can_reach_impl(dag_to, dag_from)? {
+                return Err(BmoError::Validation(
+                    "adding this link would create a cycle in the dependency graph".into(),
+                )
+                .into());
+            }
+        }
+
         let (query, values) = Query::insert()
             .into_table(RelationIden::Table)
             .columns([

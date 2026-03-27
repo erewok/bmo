@@ -2,7 +2,9 @@
 // board_snapshot_stats_impl.  sea-query does not support self-JOINs with
 // table aliases cleanly, so we drop down to a prepared statement.
 
-use crate::model::{ConflictingIssue, FileConflict};
+use rusqlite;
+
+use crate::model::{ConflictingIssue, FileConflict, Status};
 
 use super::SqliteRepository;
 
@@ -23,25 +25,29 @@ impl SqliteRepository {
                 AND f2.issue_id != f1.issue_id
             JOIN issues i
                 ON  i.id        = f2.issue_id
-                AND i.status    = 'in-progress'
+                AND i.status    = ?
             WHERE f1.issue_id = ?
             ORDER BY f1.path, i.id
         ";
 
         let mut stmt = self.conn.prepare(sql)?;
-        let rows = stmt.query_map([issue_id], |r| {
-            Ok((
-                r.get::<_, String>(0)?, // file
-                r.get::<_, i64>(1)?,    // conflict_id
-                r.get::<_, String>(2)?, // conflict_title
-                r.get::<_, String>(3)?, // conflict_status
-            ))
-        })?;
+        let rows = stmt.query_map(
+            rusqlite::params![Status::InProgress.label(), issue_id],
+            |r| {
+                Ok((
+                    r.get::<_, String>(0)?, // file
+                    r.get::<_, i64>(1)?,    // conflict_id
+                    r.get::<_, String>(2)?, // conflict_title
+                    r.get::<_, String>(3)?, // conflict_status
+                ))
+            },
+        )?;
 
         // Collect flat rows and group by file path.
         let mut result: Vec<FileConflict> = Vec::new();
         for row in rows {
-            let (file, id, title, status) = row?;
+            let (file, id, title, status_str) = row?;
+            let status = status_str.parse::<Status>().unwrap_or(Status::InProgress);
             let issue = ConflictingIssue { id, title, status };
             if let Some(last) = result.last_mut()
                 && last.file == file

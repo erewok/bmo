@@ -5,6 +5,7 @@ use crate::db::{Repository, open_db};
 use crate::model::{IssueFilter, Status};
 use crate::output::{BoardColumns, OutputMode, make_printer};
 use crate::planner::dag::{Dag, find_ready};
+use crate::planner::topo::topological_levels;
 
 #[derive(Args)]
 pub struct AgentInitArgs {}
@@ -92,6 +93,7 @@ pub fn run(_args: &AgentInitArgs, json: bool) -> anyhow::Result<()> {
     let all_issues_for_next = repo.list_issues(IssueFilter::default())?;
     let all_relations = repo.list_all_relations()?;
     let dag = Dag::build(&all_issues_for_next, &all_relations);
+    topological_levels(&dag)?;
     let next: Vec<_> = find_ready(&dag).into_iter().take(10).cloned().collect();
 
     // 5. stats
@@ -218,6 +220,7 @@ fn run_with_dir_inner(bmo_dir: &std::path::Path, json: bool) -> anyhow::Result<(
     let all_issues_for_next = repo.list_issues(IssueFilter::default())?;
     let all_relations = repo.list_all_relations()?;
     let dag = Dag::build(&all_issues_for_next, &all_relations);
+    topological_levels(&dag)?;
     let next: Vec<_> = find_ready(&dag).into_iter().take(10).cloned().collect();
 
     let stats = repo.get_stats()?;

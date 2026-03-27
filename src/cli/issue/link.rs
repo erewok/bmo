@@ -3,6 +3,7 @@ use clap::{Args, Subcommand};
 use crate::cli::parse_id;
 use crate::config::find_bmo_dir;
 use crate::db::{Repository, open_db};
+use crate::errors::{BmoError, ErrorCode};
 use crate::model::RelationKind;
 use crate::output::{OutputMode, make_printer};
 
@@ -46,7 +47,21 @@ pub fn run_add(args: &AddArgs, json: bool) -> anyhow::Result<()> {
     let to_id = parse_id(&args.to_id)?;
     let kind: RelationKind = args.relation.parse()?;
 
-    let relation = repo.add_relation(from_id, kind, to_id)?;
+    let relation = match repo.add_relation(from_id, kind, to_id) {
+        Ok(r) => r,
+        Err(e) => {
+            if let Some(BmoError::Validation(msg)) = e.downcast_ref::<BmoError>() {
+                let printer = make_printer(if json {
+                    OutputMode::Json
+                } else {
+                    OutputMode::Human
+                });
+                printer.print_error(msg, ErrorCode::Validation);
+                std::process::exit(ErrorCode::Validation.exit_code());
+            }
+            return Err(e);
+        }
+    };
 
     if json {
         let envelope = serde_json::json!({ "ok": true, "data": relation, "message": format!("Linked BMO-{from_id} {kind} BMO-{to_id}") });

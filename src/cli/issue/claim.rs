@@ -3,7 +3,7 @@ use clap::Args;
 use crate::cli::parse_id;
 use crate::config::find_bmo_dir;
 use crate::db::{ClaimIssueInput, Repository, open_db};
-use crate::errors::BmoError;
+use crate::errors::{BmoError, ErrorCode};
 
 #[derive(Args)]
 pub struct ClaimArgs {
@@ -38,7 +38,7 @@ pub fn run(args: &ClaimArgs, json: bool) -> anyhow::Result<()> {
                     envelope["file_conflicts"] =
                         serde_json::to_value(&file_conflicts).unwrap_or_default();
                 }
-                println!("{}", serde_json::to_string_pretty(&envelope).unwrap());
+                println!("{}", serde_json::to_string_pretty(&envelope)?);
             } else {
                 println!("Claimed {}.", display);
                 for conflict in &file_conflicts {
@@ -58,14 +58,14 @@ pub fn run(args: &ClaimArgs, json: bool) -> anyhow::Result<()> {
                 if json {
                     let out = serde_json::json!({
                         "ok": false,
-                        "code": "conflict",
+                        "code": ErrorCode::Conflict.as_str(),
                         "error": msg,
                     });
-                    println!("{}", serde_json::to_string_pretty(&out).unwrap());
+                    println!("{}", serde_json::to_string_pretty(&out)?);
                 } else {
                     eprintln!("error: {}", msg);
                 }
-                std::process::exit(4);
+                std::process::exit(ErrorCode::Conflict.exit_code());
             }
 
             if let Some(BmoError::NotFound(_)) = e.downcast_ref::<BmoError>() {
@@ -73,14 +73,14 @@ pub fn run(args: &ClaimArgs, json: bool) -> anyhow::Result<()> {
                 if json {
                     let out = serde_json::json!({
                         "ok": false,
-                        "code": "not-found",
+                        "code": ErrorCode::NotFound.as_str(),
                         "error": msg,
                     });
-                    println!("{}", serde_json::to_string_pretty(&out).unwrap());
+                    println!("{}", serde_json::to_string_pretty(&out)?);
                 } else {
                     eprintln!("error: {}", msg);
                 }
-                std::process::exit(2);
+                std::process::exit(ErrorCode::NotFound.exit_code());
             }
 
             Err(e)

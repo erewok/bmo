@@ -105,7 +105,8 @@ pub fn run_conflicts(args: &ConflictsArgs, json: bool) -> anyhow::Result<()> {
     let conflicts = repo.list_file_conflicts(issue_id)?;
 
     if json {
-        let envelope = serde_json::json!({ "ok": true, "data": conflicts, "message": format!("{} conflict(s)", conflicts.len()) });
+        let total_conflicts: usize = conflicts.iter().map(|c| c.conflicts_with.len()).sum();
+        let envelope = serde_json::json!({ "ok": true, "data": conflicts, "message": format!("{} conflict(s)", total_conflicts) });
         println!("{}", serde_json::to_string_pretty(&envelope)?);
     } else if conflicts.is_empty() {
         println!("No conflicts.");

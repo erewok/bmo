@@ -219,8 +219,9 @@ When `--phase` is given, the `data` field is a plain array of issue objects (not
 envelope), suitable for a coordinator to iterate and dispatch. An out-of-range phase number
 returns a `validation` error (exit 3).
 
-When `--assignee` and `--phase` are both given, the assignee filter is applied first, then
-phase N is extracted. An empty result is not an error.
+When `--assignee` and `--phase` are both given, phase N is extracted from the full plan first,
+then the result is filtered by assignee within that phase. An empty result is not an error.
+`--assignee` requires `--phase`; using `--assignee` without `--phase` is a validation error (exit 3).
 
 **Examples:**
 
@@ -244,13 +245,17 @@ bmo plan --phase 2 --assignee alice --json
 }
 ```
 
-**JSON output** (`data` field, with `--phase N`): flat array of issue objects.
+**JSON output** (with `--phase N`):
 
 ```json
-[
-  {"id": 3, "title": "...", "status": "todo", ...},
-  {"id": 5, "title": "...", "status": "todo", ...}
-]
+{
+  "ok": true,
+  "data": [
+    {"id": 3, "title": "...", "status": "todo", ...},
+    {"id": 5, "title": "...", "status": "todo", ...}
+  ],
+  "message": "Phase 1: 2 issue(s)."
+}
 ```
 
 Out-of-range phase error (exit 3):

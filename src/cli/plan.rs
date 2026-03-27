@@ -28,6 +28,12 @@ pub fn run(args: &PlanArgs, json: bool) -> anyhow::Result<()> {
         OutputMode::Human
     });
 
+    // Validate: --assignee requires --phase
+    if args.assignee.is_some() && args.phase.is_none() {
+        printer.print_error("--assignee requires --phase", ErrorCode::Validation);
+        std::process::exit(ErrorCode::Validation.exit_code());
+    }
+
     let all_issues = repo.list_issues(IssueFilter::default())?;
     let all_relations = repo.list_all_relations()?;
 
