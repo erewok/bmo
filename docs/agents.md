@@ -80,7 +80,7 @@ Use `-d` to provide a rich description so any agent or human reading the issue l
 ```bash
 bmo create -t "Implement retry logic" \
   -d "Add exponential backoff to the HTTP client. Max 3 retries. See src/client.rs." \
-  -p high -T task
+  -p high -k task
 ```
 
 Attach all files the issue affects immediately after creation:

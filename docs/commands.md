@@ -380,7 +380,7 @@ Create a new issue.
 | `-d, --description <text>` | string | `""` | Issue description |
 | `-s, --status <status>` | string | `backlog` | Initial status |
 | `-p, --priority <priority>` | string | `medium` | Priority |
-| `-T, --kind <kind>` | string | `task` | Issue kind/type |
+| `-k, --kind <kind>` | string | `task` | Issue kind/type |
 | `-a, --assignee <name>` | string | (none) | Assignee |
 | `--parent <id>` | string | (none) | Parent issue ID |
 | `-l, --label <label>` | string (repeatable) | (none) | Label to apply (repeat for multiple) |
@@ -391,7 +391,7 @@ Create a new issue.
 ```
 bmo create --title "Fix login bug" --kind bug --priority high
 bmo issue create --title "Fix login bug" --kind bug --priority high
-bmo create -t "Add tests" -T task --parent BMO-1 --label testing
+bmo create -t "Add tests" -k task --parent BMO-1 --label testing
 bmo create --title "Epic: v2 launch" --kind epic --json
 ```
 
@@ -476,7 +476,7 @@ Edit one or more fields on an existing issue. Only the fields you supply are upd
 | `-d, --description <text>` | string | (unchanged) | New description |
 | `-s, --status <status>` | string | (unchanged) | New status |
 | `-p, --priority <priority>` | string | (unchanged) | New priority |
-| `-T, --kind <kind>` | string | (unchanged) | New kind |
+| `-k, --kind <kind>` | string | (unchanged) | New kind |
 | `-a, --assignee <name>` | string | (unchanged) | New assignee |
 | `--parent <id>` | string | (unchanged) | New parent issue ID |
 

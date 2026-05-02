@@ -26,7 +26,7 @@ pub const CHEAT_SHEET: &str = r#"## BMO Quick Reference
   bmo plan --phase 1 --json            # all issues in phase 1 (iterate phases 1..N)
   bmo board --json                     # full kanban overview
   bmo link add BMO-N blocks BMO-M --json # declare a dependency between issues
-  bmo file file add BMO-N <PATH> --json # add a file to an issue
+  bmo file add BMO-N <PATH> --json # add a file to an issue
 
 ### JSON Parsing
   bmo next --json | jq '.data[] | {id: .id, title: .title}'
