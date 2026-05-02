@@ -11,13 +11,12 @@ pub struct MoveArgs {
     /// Issue ID
     pub id: String,
     /// New status
-    #[arg(short = 's', long = "status")]
+    #[arg(short, long)]
     pub status: String,
 }
 
 pub fn run(args: &MoveArgs, json: bool) -> anyhow::Result<()> {
-    let status = &args.status;
-    run_move(&args.id, status, json)
+    run_move(&args.id, &args.status, json)
 }
 
 pub fn run_move(id_str: &str, status_str: &str, json: bool) -> anyhow::Result<()> {
