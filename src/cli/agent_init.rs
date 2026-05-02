@@ -2,10 +2,11 @@ use clap::Args;
 
 use crate::config::{Config, init_bmo_dir};
 use crate::db::{Repository, open_db};
-use crate::model::{IssueFilter, Kind, Status};
+use crate::model::{IssueFilter, IssueIden, Kind, Status};
 use crate::output::{BoardColumns, OutputMode, make_printer};
 use crate::planner::dag::{Dag, find_ready};
 use crate::planner::topo::topological_levels;
+use sea_query::Order;
 
 #[derive(Args)]
 pub struct AgentInitArgs {}
@@ -57,22 +58,24 @@ pub fn run(_args: &AgentInitArgs, json: bool) -> anyhow::Result<()> {
 
     // 3. board — active issues (non-done) + most recent 10 done
     let active_issues = repo.list_issues(IssueFilter::default())?;
-    let mut done_issues = repo.list_issues(IssueFilter {
+    let done_issues = repo.list_issues(IssueFilter {
         status: Some(vec![Status::Done]),
+        order_by: Some(vec![(IssueIden::Id, Order::Desc)]),
+        limit: Some(10),
         ..Default::default()
     })?;
-    done_issues.sort_by_key(|b| std::cmp::Reverse(b.id));
-    done_issues.truncate(10);
 
     // Most recent epic across all statuses
     let recent_epic = repo
         .list_issues(IssueFilter {
             include_done: true,
             kind: Some(vec![Kind::Epic]),
+            order_by: Some(vec![(IssueIden::Id, Order::Desc)]),
+            limit: Some(1),
             ..Default::default()
         })?
         .into_iter()
-        .max_by_key(|issue| issue.id);
+        .next();
 
     let board = BoardColumns {
         backlog: active_issues
@@ -202,20 +205,23 @@ fn run_with_dir_inner(bmo_dir: &std::path::Path, json: bool) -> anyhow::Result<(
     let config = Config::load(bmo_dir)?;
 
     let active_issues = repo.list_issues(IssueFilter::default())?;
-    let mut done_issues = repo.list_issues(IssueFilter {
+    let done_issues = repo.list_issues(IssueFilter {
         status: Some(vec![Status::Done]),
+        order_by: Some(vec![(IssueIden::Id, Order::Desc)]),
+        limit: Some(10),
         ..Default::default()
     })?;
-    done_issues.sort_by_key(|b| std::cmp::Reverse(b.id));
-    done_issues.truncate(10);
 
-    let mut all_epics = repo.list_issues(IssueFilter {
-        include_done: true,
-        kind: Some(vec![Kind::Epic]),
-        ..Default::default()
-    })?;
-    all_epics.sort_by_key(|b| std::cmp::Reverse(b.id));
-    let recent_epic = all_epics.into_iter().next();
+    let recent_epic = repo
+        .list_issues(IssueFilter {
+            include_done: true,
+            kind: Some(vec![Kind::Epic]),
+            order_by: Some(vec![(IssueIden::Id, Order::Desc)]),
+            limit: Some(1),
+            ..Default::default()
+        })?
+        .into_iter()
+        .next();
 
     let board = BoardColumns {
         backlog: active_issues

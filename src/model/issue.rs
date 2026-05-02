@@ -248,6 +248,9 @@ pub struct IssueFilter {
     pub search: Option<String>,
     pub limit: Option<usize>,
     pub offset: Option<usize>,
+    /// Custom ordering to apply instead of the default (priority DESC, id ASC).
+    /// When `Some`, replaces the default ORDER BY entirely.
+    pub order_by: Option<Vec<(IssueIden, Order)>>,
     // By default filters above do not include `done` status`
     pub include_done: bool,
     // short-circuit everything above and select all issues.
@@ -356,9 +359,16 @@ impl IssueFilter {
         }
 
         // ORDER BY / LIMIT / OFFSET always applied, including when findall = true.
-        query = query
-            .order_by(IssueIden::Priority, Order::Desc)
-            .order_by(IssueIden::Id, Order::Asc);
+        // When `order_by` is explicitly set, use it instead of the default ordering.
+        if let Some(ref custom_order) = self.order_by {
+            for (col, dir) in custom_order {
+                query = query.order_by(*col, dir.clone());
+            }
+        } else {
+            query = query
+                .order_by(IssueIden::Priority, Order::Desc)
+                .order_by(IssueIden::Id, Order::Asc);
+        }
         query.apply_if(self.limit, |q, v| {
             q.limit(v as u64);
         });
