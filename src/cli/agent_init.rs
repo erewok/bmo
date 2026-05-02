@@ -65,13 +65,14 @@ pub fn run(_args: &AgentInitArgs, json: bool) -> anyhow::Result<()> {
     done_issues.truncate(10);
 
     // Most recent epic across all statuses
-    let mut all_epics = repo.list_issues(IssueFilter {
-        include_done: true,
-        kind: Some(vec![Kind::Epic]),
-        ..Default::default()
-    })?;
-    all_epics.sort_by_key(|b| std::cmp::Reverse(b.id));
-    let recent_epic = all_epics.into_iter().next();
+    let recent_epic = repo
+        .list_issues(IssueFilter {
+            include_done: true,
+            kind: Some(vec![Kind::Epic]),
+            ..Default::default()
+        })?
+        .into_iter()
+        .max_by_key(|issue| issue.id);
 
     let board = BoardColumns {
         backlog: active_issues
