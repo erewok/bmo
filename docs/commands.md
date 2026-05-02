@@ -426,8 +426,8 @@ Aliases: `bmo ls`, `bmo issue list`, `bmo issue ls`
 bmo list
 bmo issue list
 bmo list --status in-progress --assignee alice
-bmo list --kind bug --priority high --all --json
-bmo list -k bug -p high -a --json
+bmo list --kind bug --priority high --json
+bmo list --all --json
 bmo list --search "login" --limit 10
 bmo list --include-done --priority high
 ```
