@@ -31,6 +31,7 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
+    // ── Non-issue top-level commands ──────────────────────────────────────────
     /// Initialize a new bmo project in the current directory
     Init(init::InitArgs),
     /// Show or modify project configuration
@@ -55,7 +56,46 @@ pub enum Commands {
     Truncate(truncate::TruncateArgs),
     /// One-shot session orientation: init + board + next + stats + cheat sheet
     AgentInit(agent_init::AgentInitArgs),
-    /// Manage issues
+
+    // ── Issue commands (short form: `bmo <cmd>` instead of `bmo issue <cmd>`) ─
+    /// Atomically claim an issue (sets status=in-progress and assignee)
+    Claim(issue::claim::ClaimArgs),
+    /// Create a new issue
+    Create(issue::create::CreateArgs),
+    /// List issues
+    #[command(alias = "ls")]
+    List(issue::list::ListArgs),
+    /// Show issue details
+    Show(issue::show::ShowArgs),
+    /// Edit an issue
+    Edit(issue::edit::EditArgs),
+    /// Change an issue's status
+    Move(issue::move_cmd::MoveArgs),
+    /// Mark an issue as done
+    Close(issue::close::CloseArgs),
+    /// Reopen a closed issue
+    Reopen(issue::reopen::ReopenArgs),
+    /// Delete an issue
+    Delete(issue::delete::DeleteArgs),
+    /// Show issue activity log
+    Log(issue::log_cmd::LogArgs),
+    /// Show issue dependency graph
+    Graph(issue::graph::GraphArgs),
+    /// Manage comments
+    #[command(subcommand)]
+    Comment(issue::comment::CommentCommands),
+    /// Manage labels
+    #[command(subcommand)]
+    Label(issue::label::LabelCommands),
+    /// Manage issue relations
+    #[command(subcommand)]
+    Link(issue::link::LinkCommands),
+    /// Manage attached files
+    #[command(subcommand)]
+    File(issue::file_cmd::FileCommands),
+
+    // ── Long form (backward compatible): `bmo issue <cmd>` ───────────────────
+    /// Manage issues (use `bmo <cmd>` directly for brevity)
     #[command(subcommand)]
     Issue(issue::IssueCommands),
 }

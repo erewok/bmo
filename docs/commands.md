@@ -364,13 +364,15 @@ bmo web --host 0.0.0.0 --port 7777
 
 ## bmo issue
 
-Manage issues. All issue operations are subcommands of `bmo issue`.
+Manage issues. Issue subcommands can be invoked directly as `bmo <cmd>` (e.g., `bmo list`,
+`bmo show BMO-1`) or with the explicit prefix `bmo issue <cmd>` — both forms are equivalent.
+The `bmo issue` prefix is kept for backward compatibility.
 
 ### bmo issue create
 
 Create a new issue.
 
-**Synopsis:** `bmo issue create --title <title> [options]`
+**Synopsis:** `bmo create --title <title> [options]`
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
@@ -387,9 +389,10 @@ Create a new issue.
 **Examples:**
 
 ```
+bmo create --title "Fix login bug" --kind bug --priority high
 bmo issue create --title "Fix login bug" --kind bug --priority high
-bmo issue create -t "Add tests" -T task --parent BMO-1 --label testing
-bmo issue create --title "Epic: v2 launch" --kind epic --json
+bmo create -t "Add tests" -T task --parent BMO-1 --label testing
+bmo create --title "Epic: v2 launch" --kind epic --json
 ```
 
 **JSON output** (`data` field): a single issue object.
@@ -398,33 +401,35 @@ bmo issue create --title "Epic: v2 launch" --kind epic --json
 
 List issues with optional filters. Excludes done issues by default.
 
-**Synopsis:** `bmo issue list [options]`
+**Synopsis:** `bmo list [options]`
 
-Alias: `bmo issue ls`
+Aliases: `bmo ls`, `bmo issue list`, `bmo issue ls`
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `-s, --status <status>` | string (repeatable) | (none) | Filter by status |
 | `-p, --priority <priority>` | string (repeatable) | (none) | Filter by priority |
-| `-T, --kind <kind>` | string (repeatable) | (none) | Filter by kind |
-| `-a, --assignee <name>` | string | (none) | Filter by assignee |
+| `-k, --kind <kind>` | string (repeatable) | (none) | Filter by kind |
+| `--assignee <name>` | string | (none) | Filter by assignee |
 | `-l, --label <label>` | string (repeatable) | (none) | Filter by label (AND semantics) |
 | `--parent <id>` | string | (none) | Filter to children of this issue |
 | `--search <text>` | string | (none) | Full-text search in title and description |
 | `--limit <n>` | integer | 50 | Maximum number of results |
 | `--sort <field>` | string | (none) | Sort field |
 | `--include-done` | bool | false | Removes the default `status != done` exclusion; done issues are returned alongside active ones. All other filters (priority, kind, labels, etc.) remain active. Distinct from `--all` which short-circuits every predicate. |
-| `--all` | bool | false | Return all issues regardless of status or other filters (short-circuits all predicates) |
+| `-a, --all` | bool | false | Return all issues regardless of status or other filters (short-circuits all predicates) |
 | `--oneline` | bool | false | Print one compact line per issue (ID, status, priority, kind, title) |
 
 **Examples:**
 
 ```
+bmo list
 bmo issue list
-bmo issue list --status in-progress --assignee alice
-bmo issue list --kind bug --priority high --all --json
-bmo issue list --search "login" --limit 10
-bmo issue list --include-done --priority high
+bmo list --status in-progress --assignee alice
+bmo list --kind bug --priority high --all --json
+bmo list -k bug -p high -a --json
+bmo list --search "login" --limit 10
+bmo list --include-done --priority high
 ```
 
 **JSON output** (`data` field): array of issue objects.
@@ -433,7 +438,7 @@ bmo issue list --include-done --priority high
 
 Show full details for a single issue, including sub-issues, relations, comments, and labels.
 
-**Synopsis:** `bmo issue show <id>`
+**Synopsis:** `bmo show <id>`
 
 | Argument | Type | Description |
 |----------|------|-------------|
@@ -442,8 +447,8 @@ Show full details for a single issue, including sub-issues, relations, comments,
 **Examples:**
 
 ```
-bmo issue show BMO-5
-bmo issue show 5 --json
+bmo show BMO-5
+bmo show 5 --json
 ```
 
 **JSON output** (`data` field):
@@ -462,7 +467,7 @@ bmo issue show 5 --json
 
 Edit one or more fields on an existing issue. Only the fields you supply are updated.
 
-**Synopsis:** `bmo issue edit <id> [options]`
+**Synopsis:** `bmo edit <id> [options]`
 
 | Argument/Flag | Type | Default | Description |
 |---------------|------|---------|-------------|
@@ -478,9 +483,9 @@ Edit one or more fields on an existing issue. Only the fields you supply are upd
 **Examples:**
 
 ```
-bmo issue edit BMO-3 --status in-progress
-bmo issue edit 7 --title "Updated title" --priority high --json
-bmo issue edit BMO-10 --assignee bob --parent BMO-1
+bmo edit BMO-3 --status in-progress
+bmo edit 7 --title "Updated title" --priority high --json
+bmo edit BMO-10 --assignee bob --parent BMO-1
 ```
 
 **JSON output** (`data` field): the updated issue object.
@@ -489,7 +494,7 @@ bmo issue edit BMO-10 --assignee bob --parent BMO-1
 
 Change an issue's status.
 
-**Synopsis:** `bmo issue move <id> --status <status>`
+**Synopsis:** `bmo move <id> --status <status>`
 
 | Argument/Flag | Type | Default | Description |
 |---------------|------|---------|-------------|
@@ -499,8 +504,8 @@ Change an issue's status.
 **Examples:**
 
 ```
-bmo issue move BMO-4 --status in-progress
-bmo issue move 4 --status review --json
+bmo move BMO-4 --status in-progress
+bmo move 4 --status review --json
 ```
 
 **JSON output** (`data` field): the updated issue object.
@@ -509,7 +514,7 @@ bmo issue move 4 --status review --json
 
 Mark an issue as done (sets status to `done`).
 
-**Synopsis:** `bmo issue close <id>`
+**Synopsis:** `bmo close <id>`
 
 | Argument | Type | Description |
 |----------|------|-------------|
@@ -518,8 +523,8 @@ Mark an issue as done (sets status to `done`).
 **Example:**
 
 ```
-bmo issue close BMO-5
-bmo issue close 5 --json
+bmo close BMO-5
+bmo close 5 --json
 ```
 
 **JSON output** (`data` field): the updated issue object.
@@ -528,7 +533,7 @@ bmo issue close 5 --json
 
 Reopen a closed issue (sets status to `todo`).
 
-**Synopsis:** `bmo issue reopen <id>`
+**Synopsis:** `bmo reopen <id>`
 
 | Argument | Type | Description |
 |----------|------|-------------|
@@ -537,7 +542,7 @@ Reopen a closed issue (sets status to `todo`).
 **Example:**
 
 ```
-bmo issue reopen BMO-5
+bmo reopen BMO-5
 ```
 
 **JSON output** (`data` field): the updated issue object.
@@ -548,7 +553,7 @@ Atomically claim an issue: sets status to `in-progress` and optionally records a
 in a single conditional SQL UPDATE. If another agent has already claimed the ticket, returns
 a `conflict` error rather than overwriting.
 
-**Synopsis:** `bmo issue claim <id> [--assignee <name>]`
+**Synopsis:** `bmo claim <id> [--assignee <name>]`
 
 | Argument/Flag | Type | Default | Description |
 |---------------|------|---------|-------------|
@@ -566,8 +571,8 @@ a `conflict` error rather than overwriting.
 **Examples:**
 
 ```
-bmo issue claim BMO-7
-bmo issue claim BMO-7 --assignee alice --json
+bmo claim BMO-7
+bmo claim BMO-7 --assignee alice --json
 ```
 
 **JSON output (`data` field):** the updated issue object.
@@ -583,7 +588,7 @@ includes a top-level `"file_conflicts"` key (alongside `ok`, `data`, `message`):
 
 Permanently delete an issue. Prompts for confirmation unless `--yes` is passed.
 
-**Synopsis:** `bmo issue delete <id> [--yes]`
+**Synopsis:** `bmo delete <id> [--yes]`
 
 | Argument/Flag | Type | Default | Description |
 |---------------|------|---------|-------------|
@@ -593,8 +598,8 @@ Permanently delete an issue. Prompts for confirmation unless `--yes` is passed.
 **Examples:**
 
 ```
-bmo issue delete BMO-9
-bmo issue delete 9 --yes --json
+bmo delete BMO-9
+bmo delete 9 --yes --json
 ```
 
 **JSON output** (`data` field): `null`.
@@ -603,7 +608,7 @@ bmo issue delete 9 --yes --json
 
 Show the activity log for an issue.
 
-**Synopsis:** `bmo issue log <id> [--limit <n>]`
+**Synopsis:** `bmo log <id> [--limit <n>]`
 
 | Argument/Flag | Type | Default | Description |
 |---------------|------|---------|-------------|
@@ -613,8 +618,8 @@ Show the activity log for an issue.
 **Examples:**
 
 ```
-bmo issue log BMO-3
-bmo issue log 3 --limit 20 --json
+bmo log BMO-3
+bmo log 3 --limit 20 --json
 ```
 
 **JSON output** (`data` field): array of activity entry objects.
@@ -623,7 +628,7 @@ bmo issue log 3 --limit 20 --json
 
 Show the blocking/blocked-by dependency graph for an issue.
 
-**Synopsis:** `bmo issue graph <id>`
+**Synopsis:** `bmo graph <id>`
 
 | Argument | Type | Description |
 |----------|------|-------------|
@@ -632,8 +637,8 @@ Show the blocking/blocked-by dependency graph for an issue.
 **Example:**
 
 ```
-bmo issue graph BMO-1
-bmo issue graph 1 --json
+bmo graph BMO-1
+bmo graph 1 --json
 ```
 
 **JSON output** (`data` field):
@@ -649,7 +654,7 @@ bmo issue graph 1 --json
 
 Add a comment to an issue.
 
-**Synopsis:** `bmo issue comment add <id> --body <text> [--author <name>]`
+**Synopsis:** `bmo comment add <id> --body <text> [--author <name>]`
 
 | Argument/Flag | Type | Default | Description |
 |---------------|------|---------|-------------|
@@ -660,8 +665,8 @@ Add a comment to an issue.
 **Examples:**
 
 ```
-bmo issue comment add BMO-3 --body "Investigating now"
-bmo issue comment add 3 --body "Fixed in commit abc123" --author alice --json
+bmo comment add BMO-3 --body "Investigating now"
+bmo comment add 3 --body "Fixed in commit abc123" --author alice --json
 ```
 
 **JSON output** (`data` field): the created comment object.
@@ -670,7 +675,7 @@ bmo issue comment add 3 --body "Fixed in commit abc123" --author alice --json
 
 List all comments on an issue.
 
-**Synopsis:** `bmo issue comment list <id>`
+**Synopsis:** `bmo comment list <id>`
 
 | Argument | Type | Description |
 |----------|------|-------------|
@@ -679,7 +684,7 @@ List all comments on an issue.
 **Example:**
 
 ```
-bmo issue comment list BMO-3 --json
+bmo comment list BMO-3 --json
 ```
 
 **JSON output** (`data` field): array of comment objects.
@@ -688,7 +693,7 @@ bmo issue comment list BMO-3 --json
 
 Add a label to an issue. Creates the label if it does not already exist.
 
-**Synopsis:** `bmo issue label add <id> <name> [--color <hex>]`
+**Synopsis:** `bmo label add <id> <name> [--color <hex>]`
 
 | Argument/Flag | Type | Default | Description |
 |---------------|------|---------|-------------|
@@ -699,8 +704,8 @@ Add a label to an issue. Creates the label if it does not already exist.
 **Examples:**
 
 ```
-bmo issue label add BMO-2 bug
-bmo issue label add BMO-2 urgent --color "#ff0000" --json
+bmo label add BMO-2 bug
+bmo label add BMO-2 urgent --color "#ff0000" --json
 ```
 
 **JSON output** (`data` field): the label object.
@@ -709,7 +714,7 @@ bmo issue label add BMO-2 urgent --color "#ff0000" --json
 
 Remove a label from an issue. The label itself is not deleted from the system.
 
-**Synopsis:** `bmo issue label rm <id> <name>`
+**Synopsis:** `bmo label rm <id> <name>`
 
 Alias: `bmo issue label remove`
 
@@ -721,7 +726,7 @@ Alias: `bmo issue label remove`
 **Example:**
 
 ```
-bmo issue label rm BMO-2 bug
+bmo label rm BMO-2 bug
 ```
 
 **JSON output** (`data` field): `null`.
@@ -730,7 +735,7 @@ bmo issue label rm BMO-2 bug
 
 List all labels attached to an issue.
 
-**Synopsis:** `bmo issue label list <id>`
+**Synopsis:** `bmo label list <id>`
 
 | Argument | Type | Description |
 |----------|------|-------------|
@@ -739,7 +744,7 @@ List all labels attached to an issue.
 **Example:**
 
 ```
-bmo issue label list BMO-2 --json
+bmo label list BMO-2 --json
 ```
 
 **JSON output** (`data` field): array of label objects.
@@ -748,7 +753,7 @@ bmo issue label list BMO-2 --json
 
 Delete a label from the system entirely, removing it from all issues.
 
-**Synopsis:** `bmo issue label delete <name>`
+**Synopsis:** `bmo label delete <name>`
 
 | Argument | Type | Description |
 |----------|------|-------------|
@@ -757,7 +762,7 @@ Delete a label from the system entirely, removing it from all issues.
 **Example:**
 
 ```
-bmo issue label delete obsolete-label
+bmo label delete obsolete-label
 ```
 
 **JSON output** (`data` field): `null`.
@@ -766,7 +771,7 @@ bmo issue label delete obsolete-label
 
 Add a directional relationship between two issues.
 
-**Synopsis:** `bmo issue link add <from-id> <relation> <to-id>`
+**Synopsis:** `bmo link add <from-id> <relation> <to-id>`
 
 | Argument | Type | Description |
 |----------|------|-------------|
@@ -777,8 +782,8 @@ Add a directional relationship between two issues.
 **Examples:**
 
 ```
-bmo issue link add BMO-1 blocks BMO-2
-bmo issue link add 3 depends-on 1 --json
+bmo link add BMO-1 blocks BMO-2
+bmo link add 3 depends-on 1 --json
 ```
 
 **JSON output** (`data` field): the created relation object.
@@ -787,7 +792,7 @@ bmo issue link add 3 depends-on 1 --json
 
 Remove a relation by its numeric relation ID (not an issue ID).
 
-**Synopsis:** `bmo issue link remove <relation-id>`
+**Synopsis:** `bmo link remove <relation-id>`
 
 | Argument | Type | Description |
 |----------|------|-------------|
@@ -796,7 +801,7 @@ Remove a relation by its numeric relation ID (not an issue ID).
 **Example:**
 
 ```
-bmo issue link remove 7
+bmo link remove 7
 ```
 
 **JSON output** (`data` field): `null`.
@@ -805,7 +810,7 @@ bmo issue link remove 7
 
 List all relations for an issue.
 
-**Synopsis:** `bmo issue link list <id>`
+**Synopsis:** `bmo link list <id>`
 
 | Argument | Type | Description |
 |----------|------|-------------|
@@ -814,7 +819,7 @@ List all relations for an issue.
 **Example:**
 
 ```
-bmo issue link list BMO-1 --json
+bmo link list BMO-1 --json
 ```
 
 **JSON output** (`data` field): array of relation objects.
@@ -823,7 +828,7 @@ bmo issue link list BMO-1 --json
 
 Attach a file path to an issue.
 
-**Synopsis:** `bmo issue file add <id> <path>`
+**Synopsis:** `bmo file add <id> <path>`
 
 | Argument | Type | Description |
 |----------|------|-------------|
@@ -833,8 +838,8 @@ Attach a file path to an issue.
 **Example:**
 
 ```
-bmo issue file add BMO-3 src/main.rs
-bmo issue file add 3 docs/spec.md --json
+bmo file add BMO-3 src/main.rs
+bmo file add 3 docs/spec.md --json
 ```
 
 **JSON output** (`data` field): the created file attachment object.
@@ -843,7 +848,7 @@ bmo issue file add 3 docs/spec.md --json
 
 Remove a file attachment from an issue.
 
-**Synopsis:** `bmo issue file rm <id> <path>`
+**Synopsis:** `bmo file rm <id> <path>`
 
 Alias: `bmo issue file remove`
 
@@ -855,7 +860,7 @@ Alias: `bmo issue file remove`
 **Example:**
 
 ```
-bmo issue file rm BMO-3 src/main.rs
+bmo file rm BMO-3 src/main.rs
 ```
 
 **JSON output** (`data` field): `null`.
@@ -864,7 +869,7 @@ bmo issue file rm BMO-3 src/main.rs
 
 List all file attachments on an issue.
 
-**Synopsis:** `bmo issue file list <id>`
+**Synopsis:** `bmo file list <id>`
 
 | Argument | Type | Description |
 |----------|------|-------------|
@@ -873,7 +878,7 @@ List all file attachments on an issue.
 **Example:**
 
 ```
-bmo issue file list BMO-3 --json
+bmo file list BMO-3 --json
 ```
 
 **JSON output** (`data` field): array of file attachment objects.
@@ -883,7 +888,7 @@ bmo issue file list BMO-3 --json
 Show file conflicts: other in-progress issues that share one or more file attachments with
 the given issue.
 
-**Synopsis:** `bmo issue file conflicts <id>`
+**Synopsis:** `bmo file conflicts <id>`
 
 | Argument | Type | Description |
 |----------|------|-------------|
@@ -894,8 +899,8 @@ Exit code is always `0` — conflict presence is information, not an error.
 **Example:**
 
 ```
-bmo issue file conflicts BMO-7
-bmo issue file conflicts BMO-7 --json
+bmo file conflicts BMO-7
+bmo file conflicts BMO-7 --json
 ```
 
 **JSON output** (`data` field): array of conflict objects, empty array when no conflicts.

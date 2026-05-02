@@ -2,7 +2,7 @@ use clap::Args;
 
 use crate::config::{Config, init_bmo_dir};
 use crate::db::{Repository, open_db};
-use crate::model::{IssueFilter, Status};
+use crate::model::{IssueFilter, Kind, Status};
 use crate::output::{BoardColumns, OutputMode, make_printer};
 use crate::planner::dag::{Dag, find_ready};
 use crate::planner::topo::topological_levels;
@@ -13,22 +13,24 @@ pub struct AgentInitArgs {}
 pub const CHEAT_SHEET: &str = r#"## BMO Quick Reference
 
 ### Claiming & Working Issues
-  bmo issue claim BMO-N [--assignee <name>]  # atomically claim a ticket (exits 4 if already claimed)
-  bmo issue show  BMO-N --json               # full details + comments
-  bmo issue file conflicts BMO-N --json      # check for file overlaps with other in-progress work
-  bmo issue comment add BMO-N --body "..."   # record findings, decisions, handoffs
-  bmo issue move  BMO-N --status review      # advance status
-  bmo issue close BMO-N                      # mark done
+  bmo claim BMO-N [--assignee <name>]  # atomically claim a ticket (exits 4 if already claimed)
+  bmo show  BMO-N --json               # full details + comments
+  bmo file conflicts BMO-N --json      # check for file overlaps with other in-progress work
+  bmo comment add BMO-N --body "..."   # record findings, decisions, handoffs
+  bmo move  BMO-N --status review      # advance status
+  bmo close BMO-N                      # mark done
 
 ### Planning & Discovery
-  bmo agent-init --json                      # refresh board state (run once per session)
-  bmo next --json                            # work-ready issues (no unresolved blockers)
-  bmo plan --phase 1 --json                  # all issues in phase 1 (iterate phases 1..N)
-  bmo board --json                           # full kanban overview
+  bmo agent-init --json                # refresh board state (run once per session)
+  bmo next --json                      # work-ready issues (no unresolved blockers)
+  bmo plan --phase 1 --json            # all issues in phase 1 (iterate phases 1..N)
+  bmo board --json                     # full kanban overview
+  bmo link add BMO-N blocks BMO-M --json # declare a dependency between issues
+  bmo file file add BMO-N <PATH> --json # add a file to an issue
 
 ### JSON Parsing
   bmo next --json | jq '.data[] | {id: .id, title: .title}'
-  bmo issue comment list BMO-N --json | jq '.data[] | select(.body | startswith("HANDOFF:")) | .body'
+  bmo comment list BMO-N --json | jq '.data[] | select(.body | startswith("HANDOFF:")) | .body'
 
 ### Comment Tags (prefix every agent comment with the appropriate tag)
   BLOCKER:    — work cannot proceed without resolution (any agent)
@@ -53,40 +55,46 @@ pub fn run(_args: &AgentInitArgs, json: bool) -> anyhow::Result<()> {
     // 2. config
     let config = Config::load(&bmo_dir)?;
 
-    // 3. board
-    let board_filter = crate::filter::FilterBuilder {
-        findall: true,
-        limit: 500,
+    // 3. board — active issues (non-done) + most recent 10 done
+    let active_issues = repo.list_issues(IssueFilter::default())?;
+    let mut done_issues = repo.list_issues(IssueFilter {
+        status: Some(vec![Status::Done]),
         ..Default::default()
-    }
-    .build()?;
-    let all_issues_for_board = repo.list_issues(board_filter)?;
+    })?;
+    done_issues.sort_by_key(|b| std::cmp::Reverse(b.id));
+    done_issues.truncate(10);
+
+    // Most recent epic across all statuses
+    let mut all_epics = repo.list_issues(IssueFilter {
+        include_done: true,
+        kind: Some(vec![Kind::Epic]),
+        ..Default::default()
+    })?;
+    all_epics.sort_by_key(|b| std::cmp::Reverse(b.id));
+    let recent_epic = all_epics.into_iter().next();
+
     let board = BoardColumns {
-        backlog: all_issues_for_board
+        backlog: active_issues
             .iter()
             .filter(|i| i.status == Status::Backlog)
             .cloned()
             .collect(),
-        todo: all_issues_for_board
+        todo: active_issues
             .iter()
             .filter(|i| i.status == Status::Todo)
             .cloned()
             .collect(),
-        in_progress: all_issues_for_board
+        in_progress: active_issues
             .iter()
             .filter(|i| i.status == Status::InProgress)
             .cloned()
             .collect(),
-        review: all_issues_for_board
+        review: active_issues
             .iter()
             .filter(|i| i.status == Status::Review)
             .cloned()
             .collect(),
-        done: all_issues_for_board
-            .iter()
-            .filter(|i| i.status == Status::Done)
-            .cloned()
-            .collect(),
+        done: done_issues,
     };
 
     // 4. next (unblocked, work-ready issues)
@@ -113,6 +121,7 @@ pub fn run(_args: &AgentInitArgs, json: bool) -> anyhow::Result<()> {
                 "web_port": config.web_port(),
                 "web_host": config.web_host(),
             },
+            "recent_epic": recent_epic,
             "board": board,
             "next": next,
             "stats": stats,
@@ -150,6 +159,15 @@ pub fn run(_args: &AgentInitArgs, json: bool) -> anyhow::Result<()> {
         println!("web_host         = {}", config.web_host());
         println!();
 
+        // recent epic section
+        println!("=== recent epic ===");
+        if let Some(ref epic) = recent_epic {
+            printer.print_issue_list(std::slice::from_ref(epic));
+        } else {
+            println!("(none)");
+        }
+        println!();
+
         // board section
         println!("=== board ===");
         printer.print_board(&board);
@@ -182,39 +200,44 @@ fn run_with_dir_inner(bmo_dir: &std::path::Path, json: bool) -> anyhow::Result<(
 
     let config = Config::load(bmo_dir)?;
 
-    let board_filter = crate::filter::FilterBuilder {
-        findall: true,
-        limit: 500,
+    let active_issues = repo.list_issues(IssueFilter::default())?;
+    let mut done_issues = repo.list_issues(IssueFilter {
+        status: Some(vec![Status::Done]),
         ..Default::default()
-    }
-    .build()?;
-    let all_issues_for_board = repo.list_issues(board_filter)?;
+    })?;
+    done_issues.sort_by_key(|b| std::cmp::Reverse(b.id));
+    done_issues.truncate(10);
+
+    let mut all_epics = repo.list_issues(IssueFilter {
+        include_done: true,
+        kind: Some(vec![Kind::Epic]),
+        ..Default::default()
+    })?;
+    all_epics.sort_by_key(|b| std::cmp::Reverse(b.id));
+    let recent_epic = all_epics.into_iter().next();
+
     let board = BoardColumns {
-        backlog: all_issues_for_board
+        backlog: active_issues
             .iter()
             .filter(|i| i.status == Status::Backlog)
             .cloned()
             .collect(),
-        todo: all_issues_for_board
+        todo: active_issues
             .iter()
             .filter(|i| i.status == Status::Todo)
             .cloned()
             .collect(),
-        in_progress: all_issues_for_board
+        in_progress: active_issues
             .iter()
             .filter(|i| i.status == Status::InProgress)
             .cloned()
             .collect(),
-        review: all_issues_for_board
+        review: active_issues
             .iter()
             .filter(|i| i.status == Status::Review)
             .cloned()
             .collect(),
-        done: all_issues_for_board
-            .iter()
-            .filter(|i| i.status == Status::Done)
-            .cloned()
-            .collect(),
+        done: done_issues,
     };
 
     let all_issues_for_next = repo.list_issues(IssueFilter::default())?;
@@ -237,6 +260,7 @@ fn run_with_dir_inner(bmo_dir: &std::path::Path, json: bool) -> anyhow::Result<(
                 "web_port": config.web_port(),
                 "web_host": config.web_host(),
             },
+            "recent_epic": recent_epic,
             "board": board,
             "next": next,
             "stats": stats,
@@ -270,6 +294,14 @@ fn run_with_dir_inner(bmo_dir: &std::path::Path, json: bool) -> anyhow::Result<(
         );
         println!("web_port         = {}", config.web_port());
         println!("web_host         = {}", config.web_host());
+        println!();
+
+        println!("=== recent epic ===");
+        if let Some(ref epic) = recent_epic {
+            printer.print_issue_list(std::slice::from_ref(epic));
+        } else {
+            println!("(none)");
+        }
         println!();
 
         println!("=== board ===");
@@ -309,6 +341,7 @@ mod tests {
     fn cheat_sheet_is_non_empty() {
         assert!(!CHEAT_SHEET.is_empty());
         assert!(CHEAT_SHEET.contains("bmo agent-init"));
+        assert!(CHEAT_SHEET.contains("bmo claim"));
         assert!(CHEAT_SHEET.contains("HANDOFF:"));
     }
 

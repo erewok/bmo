@@ -54,6 +54,40 @@ fn dispatch(command: Commands, json: bool, db: Option<String>) -> anyhow::Result
         Commands::Web(args) => cli::web::run(&args, json, db),
         Commands::Truncate(args) => cli::truncate::run(&args, json, db),
         Commands::AgentInit(args) => cli::agent_init::run(&args, json),
+        // Issue commands at top level (short form: `bmo <cmd>`)
+        Commands::Claim(args) => cli::issue::claim::run(&args, json),
+        Commands::Create(args) => cli::issue::create::run(&args, json),
+        Commands::List(args) => cli::issue::list::run(&args, json),
+        Commands::Show(args) => cli::issue::show::run(&args, json),
+        Commands::Edit(args) => cli::issue::edit::run(&args, json),
+        Commands::Move(args) => cli::issue::move_cmd::run(&args, json),
+        Commands::Close(args) => cli::issue::close::run(&args, json),
+        Commands::Reopen(args) => cli::issue::reopen::run(&args, json),
+        Commands::Delete(args) => cli::issue::delete::run(&args, json),
+        Commands::Log(args) => cli::issue::log_cmd::run(&args, json),
+        Commands::Graph(args) => cli::issue::graph::run(&args, json),
+        Commands::Comment(sub) => match sub {
+            CommentCommands::Add(args) => cli::issue::comment::run_add(&args, json),
+            CommentCommands::List(args) => cli::issue::comment::run_list(&args, json),
+        },
+        Commands::Label(sub) => match sub {
+            LabelCommands::Add(args) => cli::issue::label::run_add(&args, json),
+            LabelCommands::Rm(args) => cli::issue::label::run_rm(&args, json),
+            LabelCommands::List(args) => cli::issue::label::run_list(&args, json),
+            LabelCommands::Delete(args) => cli::issue::label::run_delete(&args, json),
+        },
+        Commands::Link(sub) => match sub {
+            LinkCommands::Add(args) => cli::issue::link::run_add(&args, json),
+            LinkCommands::Remove(args) => cli::issue::link::run_remove(&args, json),
+            LinkCommands::List(args) => cli::issue::link::run_list(&args, json),
+        },
+        Commands::File(sub) => match sub {
+            FileCommands::Add(args) => cli::issue::file_cmd::run_add(&args, json),
+            FileCommands::Rm(args) => cli::issue::file_cmd::run_rm(&args, json),
+            FileCommands::List(args) => cli::issue::file_cmd::run_list(&args, json),
+            FileCommands::Conflicts(args) => cli::issue::file_cmd::run_conflicts(&args, json),
+        },
+        // Long form (backward compatible): `bmo issue <cmd>`
         Commands::Issue(sub) => dispatch_issue(sub, json),
     }
 }

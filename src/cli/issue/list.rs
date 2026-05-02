@@ -8,7 +8,7 @@ use crate::output::{OutputMode, make_printer};
 #[derive(Args)]
 pub struct ListArgs {
     /// Find everything: short-circuit all other filters and select all issues.
-    #[arg(long)]
+    #[arg(short = 'a', long = "all")]
     pub all: bool,
     /// Filter by status (repeatable)
     #[arg(short, long)]
@@ -17,10 +17,10 @@ pub struct ListArgs {
     #[arg(short, long)]
     pub priority: Vec<String>,
     /// Filter by kind (repeatable)
-    #[arg(short = 'T', long = "kind")]
+    #[arg(short = 'k', long = "kind")]
     pub kind: Vec<String>,
     /// Filter by assignee
-    #[arg(short, long)]
+    #[arg(long)]
     pub assignee: Option<String>,
     /// Filter by label (AND semantics, repeatable)
     #[arg(short, long)]
