@@ -21,7 +21,7 @@ pub struct CreateArgs {
     #[arg(short, long, default_value = "medium")]
     pub priority: String,
     /// Issue kind/type
-    #[arg(short = 'T', long = "kind", default_value = "task")]
+    #[arg(short = 'k', long = "kind", default_value = "task")]
     pub kind: String,
     /// Assignee
     #[arg(short, long)]

@@ -38,8 +38,8 @@ Download the latest binary for your platform from [GitHub Releases](https://gith
 
 ```bash
 bmo init
-bmo issue create --title "First issue" --priority medium --kind task
-bmo issue list
+bmo create --title "First issue" --priority medium --kind task
+bmo list
 bmo board
 bmo web
 ```

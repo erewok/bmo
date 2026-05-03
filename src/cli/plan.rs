@@ -18,6 +18,10 @@ pub struct PlanArgs {
     /// envelope; in human mode prints a header plus a formatted list.
     #[arg(long)]
     pub phase: Option<u32>,
+
+    /// Ignore link relations when building the plan; ordering is driven solely by file conflicts.
+    #[arg(long)]
+    pub no_links: bool,
 }
 
 pub fn run(args: &PlanArgs, json: bool) -> anyhow::Result<()> {
@@ -36,7 +40,11 @@ pub fn run(args: &PlanArgs, json: bool) -> anyhow::Result<()> {
     }
 
     let all_issues = repo.list_issues(IssueFilter::default())?;
-    let all_relations = repo.list_all_relations()?;
+    let all_relations = if args.no_links {
+        vec![]
+    } else {
+        repo.list_all_relations()?
+    };
 
     let dag = Dag::build(&all_issues, &all_relations);
 

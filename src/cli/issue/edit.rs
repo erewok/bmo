@@ -18,7 +18,7 @@ pub struct EditArgs {
     pub status: Option<String>,
     #[arg(short, long)]
     pub priority: Option<String>,
-    #[arg(short = 'T', long = "kind")]
+    #[arg(short = 'k', long = "kind")]
     pub kind: Option<String>,
     #[arg(short, long)]
     pub assignee: Option<String>,

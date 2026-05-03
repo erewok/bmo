@@ -68,9 +68,9 @@ bmo plan --phase 2 --json | jq '.data[].title'
 
 ```bash
 bmo next --json
-bmo issue show BMO-7 --json
-bmo issue comment list BMO-7   # always check comments — they may supersede the description
-bmo issue file list BMO-7      # check attached files before starting
+bmo show BMO-7 --json
+bmo comment list BMO-7   # always check comments — they may supersede the description
+bmo file list BMO-7      # check attached files before starting
 ```
 
 ## Creating Issues
@@ -78,47 +78,47 @@ bmo issue file list BMO-7      # check attached files before starting
 Use `-d` to provide a rich description so any agent or human reading the issue later has full context:
 
 ```bash
-bmo issue create -t "Implement retry logic" \
+bmo create -t "Implement retry logic" \
   -d "Add exponential backoff to the HTTP client. Max 3 retries. See src/client.rs." \
-  -p high -T task
+  -p high -k task
 ```
 
 Attach all files the issue affects immediately after creation:
 
 ```bash
-bmo issue file add BMO-7 src/client.rs
-bmo issue file add BMO-7 src/client_test.rs
+bmo file add BMO-7 src/client.rs
+bmo file add BMO-7 src/client_test.rs
 ```
 
 ## Tracking Progress
 
-Use `bmo issue claim` to atomically take ownership of an issue. It sets the status to
+Use `bmo claim` to atomically take ownership of an issue. It sets the status to
 `in-progress` and optionally records an assignee in a single operation. If another agent
 has already claimed the ticket, it returns a conflict error (exit code 4) rather than
 overwriting — making it safe for concurrent multi-agent workflows.
 
 ```bash
-bmo issue claim BMO-7                        # atomic: sets in-progress, fails if already claimed
-bmo issue claim BMO-7 --assignee alice --json
+bmo claim BMO-7                        # atomic: sets in-progress, fails if already claimed
+bmo claim BMO-7 --assignee alice --json
 ```
 
-`bmo issue claim` replaces the older two-step `move + edit` pattern. The old pattern still
+`bmo claim` replaces the older two-step `move + edit` pattern. The old pattern still
 works but `claim` is preferred when multiple agents may be picking up work simultaneously.
 
 If the claim response includes a `"file_conflicts"` key, another in-progress issue shares
 the same file attachments. Check for conflicts before beginning implementation:
 
 ```bash
-bmo issue claim BMO-7 --json | jq '.file_conflicts'
-bmo issue file conflicts BMO-7 --json        # also callable independently
+bmo claim BMO-7 --json | jq '.file_conflicts'
+bmo file conflicts BMO-7 --json        # also callable independently
 ```
 
 Once work is complete, close the issue:
 
 ```bash
-bmo issue move BMO-7 --status done
+bmo move BMO-7 --status done
 # or equivalently:
-bmo issue close BMO-7
+bmo close BMO-7
 ```
 
 ## Adding Context via Comments
@@ -139,16 +139,16 @@ so other agents can scan comments efficiently:
 | `HANDOFF:` | any | Work complete, context for the next agent |
 
 ```bash
-bmo issue comment add BMO-7 --body "FINDING: the HTTP client also needs connection timeout handling. Needs a follow-up issue."
-bmo issue comment add BMO-7 --body "DECISION: used exponential backoff with jitter rather than fixed intervals."
-bmo issue comment add BMO-7 --body "HANDOFF: retry logic complete. Tests in src/client_test.rs. Next agent should add integration test."
+bmo comment add BMO-7 --body "FINDING: the HTTP client also needs connection timeout handling. Needs a follow-up issue."
+bmo comment add BMO-7 --body "DECISION: used exponential backoff with jitter rather than fixed intervals."
+bmo comment add BMO-7 --body "HANDOFF: retry logic complete. Tests in src/client_test.rs. Next agent should add integration test."
 ```
 
 Scan comments by tag before starting work:
 
 ```bash
-bmo issue comment list BMO-7 --json | jq '.data[] | select(.body | startswith("HANDOFF:")) | .body'
-bmo issue comment list BMO-7 --json | jq '.data[] | select(.body | startswith("BLOCKER:")) | .body'
+bmo comment list BMO-7 --json | jq '.data[] | select(.body | startswith("HANDOFF:")) | .body'
+bmo comment list BMO-7 --json | jq '.data[] | select(.body | startswith("BLOCKER:")) | .body'
 ```
 
 Comments are the canonical record of what happened. Always read them before starting work.
@@ -158,9 +158,9 @@ Comments are the canonical record of what happened. Always read them before star
 Record which files are relevant to an issue for traceability and to enable collision detection between concurrent agents:
 
 ```bash
-bmo issue file add BMO-7 src/client.rs
-bmo issue file list BMO-7
-bmo issue file conflicts BMO-7 --json   # check for overlaps with other in-progress work
+bmo file add BMO-7 src/client.rs
+bmo file list BMO-7
+bmo file conflicts BMO-7 --json   # check for overlaps with other in-progress work
 ```
 
 ## Reading JSON Output
@@ -171,7 +171,7 @@ to Python if `jq` is unavailable.
 ```bash
 # Preferred: jq
 bmo next --json | jq '.data[] | {id: .id, title: .title}'
-bmo issue show BMO-7 --json | jq '.data.issue.status'
+bmo show BMO-7 --json | jq '.data.issue.status'
 bmo board --json | jq '.data.in_progress[].id'
 bmo plan --phase 1 --json | jq '.data[].id'
 

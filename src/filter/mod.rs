@@ -85,6 +85,7 @@ impl FilterBuilder {
             } else {
                 Some(self.offset)
             },
+            order_by: None,
             include_done: self.include_done,
             findall: self.findall,
         })
