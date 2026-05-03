@@ -13,6 +13,13 @@
   <div class="description">{{ issue.description | markdown }}</div>
   {% endif %}
 
+  {% if issue.files %}
+  <h2>Files</h2>
+  <ul class="file-list">
+    {% for f in issue.files %}<li><code>{{ f }}</code></li>{% endfor %}
+  </ul>
+  {% endif %}
+
   {% if comments %}
   <h2>Comments</h2>
   {% for c in comments %}

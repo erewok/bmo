@@ -255,12 +255,12 @@ impl Printer for HumanPrinter {
             for rel in &detail.relations {
                 let direction = match rel.kind {
                     RelationKind::Blocks => format!("→ blocks BMO-{}", rel.to_id),
-                    RelationKind::BlockedBy => format!("← blocked by BMO-{}", rel.from_id),
+                    RelationKind::BlockedBy => format!("← blocked by BMO-{}", rel.to_id),
                     RelationKind::DependsOn => format!("→ depends on BMO-{}", rel.to_id),
-                    RelationKind::DependencyOf => format!("← dependency of BMO-{}", rel.from_id),
+                    RelationKind::DependencyOf => format!("← dependency of BMO-{}", rel.to_id),
                     RelationKind::RelatesTo => format!("↔ relates to BMO-{}", rel.to_id),
                     RelationKind::Duplicates => format!("→ duplicates BMO-{}", rel.to_id),
-                    RelationKind::DuplicateOf => format!("← duplicate of BMO-{}", rel.from_id),
+                    RelationKind::DuplicateOf => format!("← duplicate of BMO-{}", rel.to_id),
                 };
                 println!("    {direction}");
             }
