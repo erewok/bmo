@@ -45,6 +45,15 @@ pub fn run_add(args: &AddArgs, json: bool) -> anyhow::Result<()> {
 
     let from_id = parse_id(&args.from_id)?;
     let to_id = parse_id(&args.to_id)?;
+    if from_id == to_id {
+        let printer = make_printer(if json {
+            OutputMode::Json
+        } else {
+            OutputMode::Human
+        });
+        printer.print_error("Cannot link an issue to itself", ErrorCode::Validation);
+        std::process::exit(ErrorCode::Validation.exit_code());
+    }
     let kind: RelationKind = args.relation.parse()?;
 
     let relation = match repo.add_relation(from_id, kind, to_id) {
