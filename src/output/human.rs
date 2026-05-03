@@ -239,6 +239,12 @@ impl Printer for HumanPrinter {
                 issue.description.replace('\n', "\n  ")
             );
         }
+        if !issue.files.is_empty() {
+            println!("\n  Files:");
+            for f in &issue.files {
+                println!("    {f}");
+            }
+        }
         if !detail.sub_issues.is_empty() {
             println!("\n  Sub-issues ({}):", detail.sub_issues.len());
             for sub in &detail.sub_issues {

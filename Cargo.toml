@@ -38,8 +38,8 @@ minijinja      = { version = "2.19.0" }
 pulldown-cmark = { version = "0.13.3", default-features = false, features = ["html"] }
 owo-colors     = { version = "4" }
 rusqlite       = { version = "0.38.0", features = ["bundled", "fallible_uint"] }
-sea-query = { version = "1.0.0-rc.1" }
-sea-query-rusqlite = { version = "0.8.0-rc.16", features = [
+sea-query = { version = "1.0.0-rc.33" }
+sea-query-rusqlite = { version = "0.8.0-rc.17", features = [
     "with-chrono",
     "with-json",
     "with-uuid",

@@ -140,13 +140,18 @@ pub async fn issue_detail_page(
         let issue = repo.get_issue(id)?;
         if let Some(issue) = issue {
             let comments = repo.list_comments(id)?;
+            let relations = repo.list_relations(id)?;
             let issue_json = serde_json::to_value(&issue)?;
             let comments_json: Vec<serde_json::Value> = comments
                 .iter()
                 .map(|c| serde_json::to_value(c).map_err(|e| anyhow::anyhow!(e)))
                 .collect::<Result<Vec<_>, _>>()?;
+            let relations_json: Vec<serde_json::Value> = relations
+                .iter()
+                .map(|r| serde_json::to_value(r).map_err(|e| anyhow::anyhow!(e)))
+                .collect::<Result<Vec<_>, _>>()?;
             let tmpl = state.env.get_template("issue.html")?;
-            let html = tmpl.render(context!(issue => issue_json, comments => comments_json))?;
+            let html = tmpl.render(context!(issue => issue_json, comments => comments_json, relations => relations_json))?;
             anyhow::Ok(Some(html))
         } else {
             anyhow::Ok(None)

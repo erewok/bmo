@@ -15,9 +15,32 @@
 
   {% if issue.files %}
   <h2>Files</h2>
-  <ul class="file-list">
-    {% for f in issue.files %}<li><code>{{ f }}</code></li>{% endfor %}
-  </ul>
+  <div class="description">
+    <ul class="file-list">
+      {% for f in issue.files %}<li><code>{{ f }}</code></li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if relations %}
+  <h2>Relations</h2>
+  <div class="description">
+    <ul class="relation-list">
+      {% for r in relations %}
+      <li>
+        {% if r.kind == "blocks" %}→ blocks <a href="/issues/{{ r.to_id }}">BMO-{{ r.to_id }}</a>
+        {% elif r.kind == "blocked-by" %}← blocked by <a href="/issues/{{ r.to_id }}">BMO-{{ r.to_id }}</a>
+        {% elif r.kind == "depends-on" %}→ depends on <a href="/issues/{{ r.to_id }}">BMO-{{ r.to_id }}</a>
+        {% elif r.kind == "dependency-of" %}← dependency of <a href="/issues/{{ r.to_id }}">BMO-{{ r.to_id }}</a>
+        {% elif r.kind == "relates-to" %}↔ relates to <a href="/issues/{{ r.to_id }}">BMO-{{ r.to_id }}</a>
+        {% elif r.kind == "duplicates" %}→ duplicates <a href="/issues/{{ r.to_id }}">BMO-{{ r.to_id }}</a>
+        {% elif r.kind == "duplicate-of" %}← duplicate of <a href="/issues/{{ r.to_id }}">BMO-{{ r.to_id }}</a>
+        {% else %}{{ r.kind }} <a href="/issues/{{ r.to_id }}">BMO-{{ r.to_id }}</a>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
   {% endif %}
 
   {% if comments %}
