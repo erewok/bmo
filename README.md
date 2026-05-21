@@ -51,7 +51,7 @@ into pi. This extension adds typed `bmo_*` tools that the LLM calls directly, in
 state injected into every agent turn's context, and `/board` `/next` `/plan` slash commands.
 
 ```bash
-pi install git:github.com/erewok/bmo
+pi install git:github.com/erewok/pi-bmo
 ```
 
 A companion pi-code extension, [bmo-dev-team](https://github.com/erewok/bmo-agent-setup), adds a

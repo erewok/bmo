@@ -40,49 +40,33 @@ current working directory looking for `.bmo/issues.db`. No configuration needed.
 
 ## Installation
 
+> **Prerequisite:** The `bmo` binary must already be installed and on your PATH before
+> the extension will work. See [Requirements](#requirements) below.
+
 Install the extension into pi's global configuration:
 
 ```bash
-pi install git:github.com/erewok/bmo
+pi install git:github.com/erewok/pi-bmo
 ```
-
-pi clones the repo, runs `npm install`, and loads the extension from `pi-extension/`
-automatically on next start.
 
 To try it without making it permanent:
 
 ```bash
-pi -e git:github.com/erewok/bmo
+pi -e git:github.com/erewok/pi-bmo
 ```
 
-### Local Development
-
-If you have the bmo repo checked out locally, add the extension path to
-`~/.pi/agent/settings.json` instead:
-
-```json
-{
-  "extensions": ["/path/to/bmo/pi-extension"]
-}
+See the [pi-bmo repo](https://github.com/erewok/pi-bmo) for full installation,
+update, and local development instructions.
 ```
 
 ## Dev-Team Extension
 
-A companion extension, [bmo-dev-team](https://github.com/erewok/bmo-agent-setup),
+A companion extension, [pi-bmo-agents](https://github.com/erewok/bmo-agent-setup),
 builds on `pi-bmo` to provide a full AI software development team that plans and
-executes work through bmo:
-
-- **`staff-engineer`** — produces Technical Design Documents and reviews all implementation changes
-- **`project-manager`** — decomposes requests into bmo issues with dependency graphs and file scoping
-- **`senior-engineer`** — implements from bmo issues within their scoped files
-- **`qa-engineer`** — verifies acceptance criteria and posts results as bmo comments
-- **`ux-designer`** — produces UX design specs before technical planning
-- **`dev-team` skill** — orchestration skill that sequences the team: design → plan → implement → review → verify
-
-Installing `bmo-dev-team` also pulls in `pi-bmo` automatically — you do not need to
-install both separately:
+executes work through bmo. Install both:
 
 ```bash
+pi install git:github.com/erewok/pi-bmo
 pi install git:github.com/erewok/bmo-agent-setup
 ```
 
@@ -106,7 +90,39 @@ detect collisions before spawning parallel agents and serialize any conflicting 
 
 ## Requirements
 
-- [bmo](https://github.com/erewok/bmo) installed and on `$PATH`
-- [pi-code](https://pi.dev) installed
+- **[bmo](https://github.com/erewok/bmo) binary** installed and available on your shell's `$PATH`
+- **[pi-code](https://pi.dev)** installed
 
-The extension has no additional runtime dependencies.
+The extension has no additional TypeScript/npm runtime dependencies.
+
+### Installing the bmo binary
+
+`pi install` only installs the TypeScript extension — it does **not** install the `bmo`
+binary for you. The extension calls `bmo` directly using Node's `execFile`, so the binary
+must be on the PATH that pi inherits when it starts.
+
+```bash
+# From source (inside the bmo repo)
+cargo install --path . --locked
+
+# Or from crates.io once published
+cargo install bmo
+```
+
+Verify with `which bmo`. If that prints nothing, the binary is not on PATH.
+
+### PATH and shell environments
+
+On macOS, `~/.cargo/bin` is added to `$PATH` by Cargo's installer and is available in
+terminal shells. However, if you launch pi from a GUI launcher (Spotlight, Alfred, a
+menu-bar app, etc.), the process may inherit a minimal `PATH` that does not include
+`~/.cargo/bin`. The safest fix is to start pi from a terminal session where `which bmo`
+works. If you must launch pi another way, add `~/.cargo/bin` to `/etc/paths` or to your
+shell's login profile (`~/.zprofile` for zsh, `~/.bash_profile` for bash).
+
+### What happens if bmo is missing
+
+The extension will show a warning notification at session start if `bmo` cannot be found.
+Every `bmo_*` tool call will also return a descriptive error rather than failing silently,
+but the LLM will not be able to perform any issue-tracking operations until the binary is
+installed and accessible.
