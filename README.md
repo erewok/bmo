@@ -14,7 +14,7 @@ For an example of agents and skills that have been instructed to use `bmo` check
 
 `bmo` was inspired by and adapted from [docket](https://github.com/ALT-F4-LLC/docket), an issue tracker for AI agents written by **ALT-F4-LLC**.
 
-In addition, the code in this repository was written by [Claude Code](https://claude.ai/claude-code), Anthropic's AI coding assistant. The repo owner directed this work.
+In addition, the code in this repository was written by [Claude Code](https://claude.ai/claude-code). The repo owner directed this work.
 
 ## Installation
 
@@ -55,9 +55,8 @@ pi install git:github.com/erewok/pi-bmo
 ```
 
 A companion pi-code extension, [bmo-dev-team](https://github.com/erewok/bmo-agent-setup), adds a
-full AI software development team (staff-engineer, project-manager, senior-engineer,
-qa-engineer, ux-designer) that plans and executes work through bmo. Installing it also
-pulls in `pi-bmo` automatically:
+full software development team of agents (staff-engineer, project-manager, senior-engineer,
+qa-engineer, ux-designer) that plans and executes work through `bmo`.
 
 ```bash
 pi install git:github.com/erewok/bmo-agent-setup

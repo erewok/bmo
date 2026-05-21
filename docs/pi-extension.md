@@ -57,7 +57,7 @@ pi -e git:github.com/erewok/pi-bmo
 
 See the [pi-bmo repo](https://github.com/erewok/pi-bmo) for full installation,
 update, and local development instructions.
-```
+
 
 ## Dev-Team Extension
 
