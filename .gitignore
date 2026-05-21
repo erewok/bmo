@@ -1,4 +1,5 @@
 /target
+pi-extension/node_modules
 .bmo
 .docket
 docs/tdd
