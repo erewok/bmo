@@ -1,0 +1,20 @@
+{
+  "name": "pi-bmo",
+  "version": "0.1.0",
+  "description": "Pi-code extension for bmo — native bmo_* tools, board context injection, status widget, and slash commands",
+  "keywords": ["pi-package", "bmo", "issue-tracker"],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/erewok/bmo"
+  },
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  }
+}
