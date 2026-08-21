@@ -79,8 +79,8 @@ fn inject_blocks_edge(dir: &TempDir, from_id: i64, to_id: i64) {
 }
 
 /// Bypass the insertion guard and write a `blocked-by` edge directly to the DB.
-/// Used only to set up the downstream loud-failure tests reproducing the
-/// original bug report, which used `blocked-by` (not `blocks`) rows.
+/// Used only to set up the downstream loud-failure tests for a cycle closed
+/// entirely via `blocked-by` (not `blocks`) rows.
 fn inject_blocked_by_edge(dir: &TempDir, from_id: i64, to_id: i64) {
     let conn = Connection::open(dir.path().join(".bmo/issues.db")).unwrap();
     conn.execute(
@@ -102,9 +102,8 @@ fn setup_with_injected_cycle() -> TempDir {
 
 /// Build a dir with issues 1 and 2 linked 1 blocked-by 2 via the CLI, then
 /// inject the opposing `blocked-by` row directly to create a cycle that
-/// bypassed the insertion guard. Reproduces the original bug report's exact
-/// scenario (a 2-cycle closed entirely via `blocked-by` rows), which the
-/// pre-fix code silently ignored instead of rejecting.
+/// bypassed the insertion guard — a 2-cycle closed entirely via `blocked-by`
+/// rows, which must be rejected rather than silently ignored.
 fn setup_with_injected_blocked_by_cycle() -> TempDir {
     let dir = setup();
     create_issues(&dir, 2);
@@ -166,9 +165,9 @@ struct CycleCase {
 /// - The `blocked-by`/`dependency-of` cases prove a *true* cycle (the same
 ///   relation kind declared in opposing directions, e.g. "A blocked-by B"
 ///   then "B blocked-by A") is rejected exactly like its `blocks`/`depends-on`
-///   counterpart — this is the gap BMO-1 fixed. These are distinct from the
-///   `ALLOWED_CASES` below, which merely restate an existing edge using its
-///   semantic-inverse verb (not a cycle at all).
+///   counterpart. These are distinct from the `ALLOWED_CASES` below, which
+///   merely restate an existing edge using its semantic-inverse verb (not a
+///   cycle at all).
 static CYCLE_CASES: &[CycleCase] = &[
     CycleCase {
         name: "blocks direct: A blocks B, then B blocks A",
@@ -253,8 +252,8 @@ fn link_add_rejects_dag_cycles() {
 
 // These cases are allowed, but for two different reasons:
 //
-// - `blocked-by`/`dependency-of` ARE DAG edges (per BMO-1, they mirror
-//   `blocks`/`depends-on` in the reversed direction). The two cases below
+// - `blocked-by`/`dependency-of` ARE DAG edges (they mirror `blocks`/
+//   `depends-on` in the reversed direction). The two cases below
 //   are allowed not because the relation kind is exempt from cycle checking,
 //   but because each one *restates the same real-world edge* using its
 //   semantic-inverse verb (e.g. "1 blocks 2" and "2 blocked-by 1" both
@@ -354,11 +353,9 @@ fn plan_next_agent_init_work_with_acyclic_graph() {
     bmo(&dir).args(["agent-init"]).assert().success();
 }
 
-// Reproduces the original bug report's exact scenario: a 2-cycle closed
-// entirely via `blocked-by` rows (not `blocks`), injected past the insertion
-// guard directly into the DB. Pre-BMO-1, `blocked-by` rows contributed no DAG
-// edge at all, so `plan`/`next`/`agent-init` silently ignored the cycle
-// instead of failing loudly.
+// Exercises a 2-cycle closed entirely via `blocked-by` rows (not `blocks`),
+// injected past the insertion guard directly into the DB, confirming that
+// `plan`/`next`/`agent-init` fail loudly instead of silently ignoring it.
 #[test]
 fn plan_fails_loud_on_blocked_by_cycle() {
     let dir = setup_with_injected_blocked_by_cycle();
@@ -394,16 +391,16 @@ fn agent_init_fails_loud_on_blocked_by_cycle() {
 /// `CHILD blocked-by PARENT` must place issues in the exact same plan phases
 /// as `PARENT blocks CHILD` on an equivalent issue set — both declare the
 /// same real-world edge (PARENT must finish first), just with the inverse
-/// verb, per BMO-1's acceptance criteria.
+/// verb.
 #[test]
 fn blocked_by_and_blocks_produce_equivalent_plan_ordering() {
     let dir_blocked_by = setup();
     let ids = create_issues(&dir_blocked_by, 2);
-    link(&dir_blocked_by, &ids, 2, "blocked-by", 1); // BMO-2 blocked-by BMO-1
+    link(&dir_blocked_by, &ids, 2, "blocked-by", 1); // issue 2 blocked-by issue 1
 
     let dir_blocks = setup();
     let ids = create_issues(&dir_blocks, 2);
-    link(&dir_blocks, &ids, 1, "blocks", 2); // BMO-1 blocks BMO-2
+    link(&dir_blocks, &ids, 1, "blocks", 2); // issue 1 blocks issue 2
 
     let plan_blocked_by = plan_json(&dir_blocked_by, &[]);
     let plan_blocks = plan_json(&dir_blocks, &[]);
@@ -425,11 +422,11 @@ fn blocked_by_and_blocks_produce_equivalent_plan_ordering() {
 fn dependency_of_and_depends_on_produce_equivalent_plan_ordering() {
     let dir_dependency_of = setup();
     let ids = create_issues(&dir_dependency_of, 2);
-    link(&dir_dependency_of, &ids, 2, "dependency-of", 1); // BMO-2 dependency-of BMO-1
+    link(&dir_dependency_of, &ids, 2, "dependency-of", 1); // issue 2 dependency-of issue 1
 
     let dir_depends_on = setup();
     let ids = create_issues(&dir_depends_on, 2);
-    link(&dir_depends_on, &ids, 1, "depends-on", 2); // BMO-1 depends-on BMO-2
+    link(&dir_depends_on, &ids, 1, "depends-on", 2); // issue 1 depends-on issue 2
 
     let plan_dependency_of = plan_json(&dir_dependency_of, &[]);
     let plan_depends_on = plan_json(&dir_depends_on, &[]);
@@ -448,15 +445,14 @@ fn dependency_of_and_depends_on_produce_equivalent_plan_ordering() {
 // ── 4. `--no-links` regression: the flag is no longer a no-op ────────────────
 
 /// With a real `blocked-by` link present, `bmo plan --json` and
-/// `bmo plan --no-links --json` must now produce different phase orderings.
-/// Prior to BMO-1, `blocked-by` contributed no DAG edge, so both invocations
-/// produced identical output regardless of `--no-links` — this was the
-/// original bug report's "no-op flag" evidence.
+/// `bmo plan --no-links --json` must produce different phase orderings —
+/// `--no-links` should demonstrably strip link-derived ordering constraints,
+/// not leave output unchanged.
 #[test]
 fn no_links_flag_changes_plan_output_when_blocked_by_links_exist() {
     let dir = setup();
     let ids = create_issues(&dir, 2);
-    link(&dir, &ids, 2, "blocked-by", 1); // BMO-2 blocked-by BMO-1
+    link(&dir, &ids, 2, "blocked-by", 1); // issue 2 blocked-by issue 1
 
     let with_links = plan_json(&dir, &[]);
     let without_links = plan_json(&dir, &["--no-links"]);

@@ -7,10 +7,9 @@
 //!
 //! Every test below runs commands with `current_dir` set to a "real" bmo project, but
 //! points `--db`/`BMO_DB` at a separate "scratch" project, and asserts that the scratch
-//! DB (not the real dir's DB) received the operation. Before BMO-5's fix, most commands
-//! silently ignored `--db`/`BMO_DB` in favor of a CWD walk-up via `find_bmo_dir()`, so
-//! these tests would observe the *real* dir's DB being mutated/read instead of the
-//! scratch one.
+//! DB (not the real dir's DB) received the operation. If a command falls back to a CWD
+//! walk-up via `find_bmo_dir()` instead of honoring `--db`/`BMO_DB`, these tests would
+//! observe the *real* dir's DB being mutated/read instead of the scratch one.
 
 use assert_cmd::cargo;
 use assert_cmd::prelude::*;

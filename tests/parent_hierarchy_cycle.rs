@@ -1,5 +1,5 @@
 // Integration test coverage for the `parent_id` hierarchy self-reference and
-// cycle guard added in BMO-19.
+// cycle guard.
 //
 // `parent_id` is a completely separate mechanism from the `issue_relations`
 // table (`blocks`/`blocked-by`/`depends-on`/`dependency-of`) already covered
@@ -14,8 +14,8 @@
 //   1. Create-time self-reference: guessing the next AUTOINCREMENT id and
 //      passing it as `--parent` on the create that will be assigned that
 //      very id. Rejected with a validation error (exit code 3), and the
-//      atomic transaction added in BMO-19's follow-up fix means no row (and
-//      no `sqlite_sequence` bump) survives the rejection — proven here by
+//      guard runs inside an atomic transaction so no row (and no
+//      `sqlite_sequence` bump) survives the rejection — proven here by
 //      confirming the next successful create reuses the same id.
 //   2. Edit-time self-reference: `bmo issue edit <id> --parent <id>`.
 //   3. A 2-cycle via edit: A.parent = B (succeeds), then B.parent = A
