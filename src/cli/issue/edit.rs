@@ -2,6 +2,7 @@ use clap::Args;
 
 use crate::cli::parse_id;
 use crate::db::{Repository, UpdateIssueInput, find_db, open_db};
+use crate::errors::{BmoError, ErrorCode};
 use crate::model::{Kind, Priority, Status};
 use crate::output::{OutputMode, make_printer};
 
@@ -64,7 +65,16 @@ pub fn run(args: &EditArgs, json: bool, db: Option<String>) -> anyhow::Result<()
         actor: None,
     };
 
-    let issue = repo.update_issue(id, &input)?;
+    let issue = match repo.update_issue(id, &input) {
+        Ok(issue) => issue,
+        Err(e) => {
+            if let Some(BmoError::Validation(msg)) = e.downcast_ref::<BmoError>() {
+                printer.print_error(msg, ErrorCode::Validation);
+                std::process::exit(ErrorCode::Validation.exit_code());
+            }
+            return Err(e);
+        }
+    };
 
     if json {
         printer.print_issue(&issue);
