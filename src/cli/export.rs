@@ -1,7 +1,6 @@
 use clap::Args;
 
-use crate::config::find_bmo_dir;
-use crate::db::{Repository, open_db};
+use crate::db::{Repository, find_db, open_db};
 use crate::model::export::ExportBundle;
 
 #[derive(Args)]
@@ -11,9 +10,9 @@ pub struct ExportArgs {
     pub output: Option<String>,
 }
 
-pub fn run(args: &ExportArgs, _json: bool) -> anyhow::Result<()> {
-    let bmo_dir = find_bmo_dir()?;
-    let repo = open_db(&bmo_dir.join("issues.db"))?;
+pub fn run(args: &ExportArgs, _json: bool, db: Option<String>) -> anyhow::Result<()> {
+    let db_path = find_db(db.as_deref())?;
+    let repo = open_db(&db_path)?;
 
     let all_issues = repo.list_issues(crate::model::IssueFilter::all())?;
     let all_relations = repo.list_all_relations()?;

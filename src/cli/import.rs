@@ -3,8 +3,7 @@ use std::collections::HashMap;
 use clap::Args;
 use serde::Deserialize;
 
-use crate::config::find_bmo_dir;
-use crate::db::{AddCommentInput, CreateIssueInput, Repository, open_db};
+use crate::db::{AddCommentInput, CreateIssueInput, Repository, find_db, open_db};
 use crate::model::activity::NewActivityEntry;
 use crate::model::export::ExportBundle;
 use crate::model::{Kind, Priority, RelationKind, Status};
@@ -146,9 +145,9 @@ fn id_key(v: &serde_json::Value) -> String {
 
 // ── run ───────────────────────────────────────────────────────────────────────
 
-pub fn run(args: &ImportArgs, json: bool) -> anyhow::Result<()> {
-    let bmo_dir = find_bmo_dir()?;
-    let repo = open_db(&bmo_dir.join("issues.db"))?;
+pub fn run(args: &ImportArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
+    let db_path = find_db(db.as_deref())?;
+    let repo = open_db(&db_path)?;
 
     let contents = std::fs::read_to_string(&args.file)?;
 

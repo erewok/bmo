@@ -1,8 +1,7 @@
 use clap::{Args, Subcommand};
 
 use crate::cli::parse_id;
-use crate::config::find_bmo_dir;
-use crate::db::{Repository, open_db};
+use crate::db::{Repository, find_db, open_db};
 
 #[derive(Subcommand)]
 pub enum FileCommands {
@@ -45,9 +44,9 @@ pub struct ConflictsArgs {
     pub id: String,
 }
 
-pub fn run_add(args: &AddArgs, json: bool) -> anyhow::Result<()> {
-    let bmo_dir = find_bmo_dir()?;
-    let repo = open_db(&bmo_dir.join("issues.db"))?;
+pub fn run_add(args: &AddArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
+    let db_path = find_db(db.as_deref())?;
+    let repo = open_db(&db_path)?;
 
     let issue_id = parse_id(&args.id)?;
     let file = repo.add_file(issue_id, &args.path)?;
@@ -61,9 +60,9 @@ pub fn run_add(args: &AddArgs, json: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run_rm(args: &RmArgs, json: bool) -> anyhow::Result<()> {
-    let bmo_dir = find_bmo_dir()?;
-    let repo = open_db(&bmo_dir.join("issues.db"))?;
+pub fn run_rm(args: &RmArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
+    let db_path = find_db(db.as_deref())?;
+    let repo = open_db(&db_path)?;
 
     let issue_id = parse_id(&args.id)?;
     repo.remove_file(issue_id, &args.path)?;
@@ -77,9 +76,9 @@ pub fn run_rm(args: &RmArgs, json: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run_list(args: &ListArgs, json: bool) -> anyhow::Result<()> {
-    let bmo_dir = find_bmo_dir()?;
-    let repo = open_db(&bmo_dir.join("issues.db"))?;
+pub fn run_list(args: &ListArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
+    let db_path = find_db(db.as_deref())?;
+    let repo = open_db(&db_path)?;
 
     let issue_id = parse_id(&args.id)?;
     let files = repo.list_files(issue_id)?;
@@ -97,9 +96,9 @@ pub fn run_list(args: &ListArgs, json: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run_conflicts(args: &ConflictsArgs, json: bool) -> anyhow::Result<()> {
-    let bmo_dir = find_bmo_dir()?;
-    let repo = open_db(&bmo_dir.join("issues.db"))?;
+pub fn run_conflicts(args: &ConflictsArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
+    let db_path = find_db(db.as_deref())?;
+    let repo = open_db(&db_path)?;
 
     let issue_id = parse_id(&args.id)?;
     let conflicts = repo.list_file_conflicts(issue_id)?;

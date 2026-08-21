@@ -42,8 +42,20 @@ impl RelationKind {
     }
 
     /// True if this relation kind contributes a blocking edge in the DAG.
+    ///
+    /// All four directional kinds (`Blocks`, `BlockedBy`, `DependsOn`,
+    /// `DependencyOf`) express a real ordering constraint and must be treated
+    /// as DAG edges regardless of which of the two equivalent verbs was used
+    /// to declare them. `RelatesTo`, `Duplicates`, and `DuplicateOf` are
+    /// informational only and must remain non-DAG edges.
     pub fn is_dag_edge(self) -> bool {
-        matches!(self, RelationKind::Blocks | RelationKind::DependsOn)
+        matches!(
+            self,
+            RelationKind::Blocks
+                | RelationKind::BlockedBy
+                | RelationKind::DependsOn
+                | RelationKind::DependencyOf
+        )
     }
 }
 
@@ -108,5 +120,20 @@ mod tests {
             RelationKind::DependencyOf
         );
         assert_eq!(RelationKind::RelatesTo.inverse(), RelationKind::RelatesTo);
+    }
+
+    #[test]
+    fn is_dag_edge_true_for_all_directional_kinds() {
+        assert!(RelationKind::Blocks.is_dag_edge());
+        assert!(RelationKind::BlockedBy.is_dag_edge());
+        assert!(RelationKind::DependsOn.is_dag_edge());
+        assert!(RelationKind::DependencyOf.is_dag_edge());
+    }
+
+    #[test]
+    fn is_dag_edge_false_for_informational_kinds() {
+        assert!(!RelationKind::RelatesTo.is_dag_edge());
+        assert!(!RelationKind::Duplicates.is_dag_edge());
+        assert!(!RelationKind::DuplicateOf.is_dag_edge());
     }
 }

@@ -127,4 +127,76 @@ mod tests {
         let dag = Dag::build(&issues, &relations);
         assert!(topological_levels(&dag).is_err());
     }
+
+    #[test]
+    fn cycle_detection_via_blocked_by() {
+        // Same 2-cycle as `cycle_detection`, but declared entirely with the
+        // "blocked-by" verb: 1 blocked-by 2, 2 blocked-by 1.
+        let issues: Vec<Issue> = (1..=2).map(make_issue).collect();
+        let relations = vec![
+            Relation {
+                id: 0,
+                from_id: 1,
+                to_id: 2,
+                kind: RelationKind::BlockedBy,
+            },
+            Relation {
+                id: 0,
+                from_id: 2,
+                to_id: 1,
+                kind: RelationKind::BlockedBy,
+            },
+        ];
+        let dag = Dag::build(&issues, &relations);
+        assert!(topological_levels(&dag).is_err());
+    }
+
+    #[test]
+    fn cycle_detection_via_mixed_dependency_kinds() {
+        // 1 → 2 via "dependency-of", closed back to a cycle via "depends-on".
+        let issues: Vec<Issue> = (1..=2).map(make_issue).collect();
+        let relations = vec![
+            Relation {
+                id: 0,
+                from_id: 1,
+                to_id: 2,
+                kind: RelationKind::DependencyOf,
+            },
+            Relation {
+                id: 0,
+                from_id: 1,
+                to_id: 2,
+                kind: RelationKind::DependsOn,
+            },
+        ];
+        let dag = Dag::build(&issues, &relations);
+        assert!(topological_levels(&dag).is_err());
+    }
+
+    #[test]
+    fn linear_chain_via_blocked_by_matches_blocks() {
+        // 1 → 2 → 3 declared with "blocked-by" must yield identical phases
+        // as the same chain declared with "blocks".
+        let issues: Vec<Issue> = (1..=3).map(make_issue).collect();
+        let relations = vec![
+            Relation {
+                id: 0,
+                from_id: 2,
+                to_id: 1,
+                kind: RelationKind::BlockedBy,
+            },
+            Relation {
+                id: 0,
+                from_id: 3,
+                to_id: 2,
+                kind: RelationKind::BlockedBy,
+            },
+        ];
+        let dag = Dag::build(&issues, &relations);
+        let levels = topological_levels(&dag).unwrap();
+        assert_eq!(levels.len(), 3);
+        assert_eq!(levels[0], vec![1]);
+        assert_eq!(levels[1], vec![2]);
+        assert_eq!(levels[2], vec![3]);
+    }
 }

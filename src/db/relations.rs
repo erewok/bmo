@@ -16,7 +16,15 @@ fn relation_col() -> Alias {
 
 impl SqliteRepository {
     /// Returns true if `target` is reachable from `start` by following DAG forward edges
-    /// (Blocks: from→to, DependsOn: to→from) in the currently stored relations.
+    /// in the currently stored relations.
+    ///
+    /// All four directional relation kinds contribute a forward edge:
+    ///   Blocks(current, X)        → forward neighbor X  (from_id = current)
+    ///   DependencyOf(current, X)  → forward neighbor X  (from_id = current)
+    ///   DependsOn(X, current)     → forward neighbor X  (to_id   = current)
+    ///   BlockedBy(X, current)     → forward neighbor X  (to_id   = current)
+    /// `RelatesTo`/`Duplicates`/`DuplicateOf` are informational only and are
+    /// never DAG edges, so they are excluded from this traversal.
     ///
     /// Uses per-node DB queries during BFS so only traversed edges are loaded, keeping
     /// each `add_relation_impl` call efficient even as the graph grows.
@@ -34,9 +42,7 @@ impl SqliteRepository {
                 continue;
             }
 
-            // Query only DAG neighbors of `current`:
-            //   Blocks(current, X)    → forward neighbor X  (from_id = current)
-            //   DependsOn(X, current) → forward neighbor X  (to_id   = current)
+            // Query only DAG neighbors of `current`.
             let (sql, values) = Query::select()
                 .column(RelationIden::FromId)
                 .column(RelationIden::ToId)
@@ -46,12 +52,18 @@ impl SqliteRepository {
                     Cond::any()
                         .add(
                             Cond::all()
-                                .add(Expr::col(relation_col()).eq(RelationKind::Blocks.label()))
+                                .add(Expr::col(relation_col()).is_in([
+                                    RelationKind::Blocks.label(),
+                                    RelationKind::DependencyOf.label(),
+                                ]))
                                 .add(Expr::col(RelationIden::FromId).eq(current)),
                         )
                         .add(
                             Cond::all()
-                                .add(Expr::col(relation_col()).eq(RelationKind::DependsOn.label()))
+                                .add(Expr::col(relation_col()).is_in([
+                                    RelationKind::DependsOn.label(),
+                                    RelationKind::BlockedBy.label(),
+                                ]))
                                 .add(Expr::col(RelationIden::ToId).eq(current)),
                         ),
                 )
@@ -68,8 +80,16 @@ impl SqliteRepository {
             for row in rows {
                 let (from_id, to_id, kind_str) = row?;
                 let next = match kind_str.as_str() {
-                    k if k == RelationKind::Blocks.label() => to_id,
-                    k if k == RelationKind::DependsOn.label() => from_id,
+                    k if k == RelationKind::Blocks.label()
+                        || k == RelationKind::DependencyOf.label() =>
+                    {
+                        to_id
+                    }
+                    k if k == RelationKind::DependsOn.label()
+                        || k == RelationKind::BlockedBy.label() =>
+                    {
+                        from_id
+                    }
                     _ => continue,
                 };
                 if next == target {
@@ -91,11 +111,15 @@ impl SqliteRepository {
     ) -> anyhow::Result<Relation> {
         // Cycle check: reject any DAG edge that would create a cycle.
         // Blocks(A, B) adds DAG edge A→B; a cycle exists if B can already reach A.
+        // DependencyOf(A, B) adds DAG edge A→B (same direction as Blocks; it is
+        //   the semantic inverse of DependsOn, not of Blocks).
         // DependsOn(A, B) adds DAG edge B→A; a cycle exists if A can already reach B.
+        // BlockedBy(A, B) adds DAG edge B→A (same direction as DependsOn; it is
+        //   the semantic inverse of Blocks).
         if kind.is_dag_edge() {
             let (dag_from, dag_to) = match kind {
-                RelationKind::Blocks => (from_id, to_id),
-                RelationKind::DependsOn => (to_id, from_id),
+                RelationKind::Blocks | RelationKind::DependencyOf => (from_id, to_id),
+                RelationKind::DependsOn | RelationKind::BlockedBy => (to_id, from_id),
                 _ => unreachable!(),
             };
             if self.can_reach_impl(dag_to, dag_from)? {

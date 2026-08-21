@@ -1,7 +1,6 @@
 use clap::Args;
 
-use crate::config::find_bmo_dir;
-use crate::db::{Repository, open_db};
+use crate::db::{Repository, find_db, open_db};
 use crate::model::IssueFilter;
 use crate::output::{OutputMode, make_printer};
 use crate::planner::dag::{Dag, find_ready};
@@ -17,9 +16,9 @@ pub struct NextArgs {
     pub limit: usize,
 }
 
-pub fn run(args: &NextArgs, json: bool) -> anyhow::Result<()> {
-    let bmo_dir = find_bmo_dir()?;
-    let repo = open_db(&bmo_dir.join("issues.db"))?;
+pub fn run(args: &NextArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
+    let db_path = find_db(db.as_deref())?;
+    let repo = open_db(&db_path)?;
     let printer = make_printer(if json {
         OutputMode::Json
     } else {

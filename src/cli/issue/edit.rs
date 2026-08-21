@@ -1,8 +1,7 @@
 use clap::Args;
 
 use crate::cli::parse_id;
-use crate::config::find_bmo_dir;
-use crate::db::{Repository, UpdateIssueInput, open_db};
+use crate::db::{Repository, UpdateIssueInput, find_db, open_db};
 use crate::model::{Kind, Priority, Status};
 use crate::output::{OutputMode, make_printer};
 
@@ -26,9 +25,9 @@ pub struct EditArgs {
     pub parent: Option<String>,
 }
 
-pub fn run(args: &EditArgs, json: bool) -> anyhow::Result<()> {
-    let bmo_dir = find_bmo_dir()?;
-    let repo = open_db(&bmo_dir.join("issues.db"))?;
+pub fn run(args: &EditArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
+    let db_path = find_db(db.as_deref())?;
+    let repo = open_db(&db_path)?;
     let printer = make_printer(if json {
         OutputMode::Json
     } else {

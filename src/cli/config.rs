@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use clap::Args;
 
 use crate::config::{Config, find_bmo_dir};
@@ -12,8 +14,26 @@ pub struct ConfigArgs {
     pub set: Option<String>,
 }
 
-pub fn run(args: &ConfigArgs, json: bool) -> anyhow::Result<()> {
-    let bmo_dir = find_bmo_dir()?;
+/// Resolve the .bmo directory, honoring an explicit `--db`/`BMO_DB` override
+/// (which takes the parent of the given issues.db path) and otherwise falling
+/// back to the existing CWD-based search.
+fn resolve_bmo_dir(db: Option<&str>) -> anyhow::Result<PathBuf> {
+    match db {
+        Some(path) => {
+            let db_path = PathBuf::from(path);
+            let dir = db_path
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| PathBuf::from("."));
+            std::fs::create_dir_all(&dir)?;
+            Ok(dir)
+        }
+        None => find_bmo_dir(),
+    }
+}
+
+pub fn run(args: &ConfigArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
+    let bmo_dir = resolve_bmo_dir(db.as_deref())?;
     let mut config = Config::load(&bmo_dir)?;
 
     if let Some(kv) = &args.set {
