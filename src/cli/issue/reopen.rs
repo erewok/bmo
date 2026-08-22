@@ -8,6 +8,6 @@ pub struct ReopenArgs {
     pub id: String,
 }
 
-pub fn run(args: &ReopenArgs, json: bool) -> anyhow::Result<()> {
-    run_move(&args.id, "todo", json)
+pub fn run(args: &ReopenArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
+    run_move(&args.id, "todo", json, db)
 }

@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use clap::Args;
 
 use crate::config::{Config, init_bmo_dir};
@@ -44,12 +46,35 @@ pub const CHEAT_SHEET: &str = r#"## BMO Quick Reference
   DECISION:   — approach chosen and rationale (senior-engineer)
   HANDOFF:    — work complete, context for the next agent (any agent)"#;
 
-pub fn run(_args: &AgentInitArgs, json: bool) -> anyhow::Result<()> {
+/// Resolve where to bootstrap/find the bmo project for `agent-init`.
+///
+/// If an explicit `--db`/`BMO_DB` path is given, the project is initialized at
+/// that exact file path instead of the CWD, creating the parent directory if
+/// needed. Otherwise falls back to the existing CWD-based behavior.
+fn resolve_bmo_paths(db: Option<&str>) -> anyhow::Result<(PathBuf, PathBuf)> {
+    match db {
+        Some(path) => {
+            let db_path = PathBuf::from(path);
+            let dir = db_path
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| PathBuf::from("."));
+            std::fs::create_dir_all(&dir)?;
+            Ok((dir, db_path))
+        }
+        None => {
+            let bmo_dir = init_bmo_dir()?;
+            let db_path = bmo_dir.join("issues.db");
+            Ok((bmo_dir, db_path))
+        }
+    }
+}
+
+pub fn run(_args: &AgentInitArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
     // ── Collect phase: run all sub-operations, fail fast on error ────────────
 
     // 1. init
-    let bmo_dir = init_bmo_dir()?;
-    let db_path = bmo_dir.join("issues.db");
+    let (bmo_dir, db_path) = resolve_bmo_paths(db.as_deref())?;
     let already_existed = db_path.exists();
     let repo = open_db(&db_path)?;
 

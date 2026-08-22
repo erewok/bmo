@@ -1,8 +1,7 @@
 use clap::Args;
 
 use crate::cli::parse_id;
-use crate::config::find_bmo_dir;
-use crate::db::{ClaimIssueInput, Repository, open_db};
+use crate::db::{ClaimIssueInput, Repository, find_db, open_db};
 use crate::errors::{BmoError, ErrorCode};
 
 #[derive(Args)]
@@ -14,9 +13,9 @@ pub struct ClaimArgs {
     pub assignee: Option<String>,
 }
 
-pub fn run(args: &ClaimArgs, json: bool) -> anyhow::Result<()> {
-    let bmo_dir = find_bmo_dir()?;
-    let repo = open_db(&bmo_dir.join("issues.db"))?;
+pub fn run(args: &ClaimArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
+    let db_path = find_db(db.as_deref())?;
+    let repo = open_db(&db_path)?;
 
     let issue_id = parse_id(&args.id)?;
 

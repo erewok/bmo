@@ -1,8 +1,7 @@
 use clap::{Args, Subcommand};
 
 use crate::cli::parse_id;
-use crate::config::find_bmo_dir;
-use crate::db::{Repository, open_db};
+use crate::db::{Repository, find_db, open_db};
 use crate::output::{OutputMode, make_printer};
 
 #[derive(Subcommand)]
@@ -49,9 +48,9 @@ pub struct DeleteArgs {
     pub name: String,
 }
 
-pub fn run_add(args: &AddArgs, json: bool) -> anyhow::Result<()> {
-    let bmo_dir = find_bmo_dir()?;
-    let repo = open_db(&bmo_dir.join("issues.db"))?;
+pub fn run_add(args: &AddArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
+    let db_path = find_db(db.as_deref())?;
+    let repo = open_db(&db_path)?;
 
     let issue_id = parse_id(&args.id)?;
     let label = repo.get_or_create_label(&args.name, args.color.as_deref())?;
@@ -66,9 +65,9 @@ pub fn run_add(args: &AddArgs, json: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run_rm(args: &RmArgs, json: bool) -> anyhow::Result<()> {
-    let bmo_dir = find_bmo_dir()?;
-    let repo = open_db(&bmo_dir.join("issues.db"))?;
+pub fn run_rm(args: &RmArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
+    let db_path = find_db(db.as_deref())?;
+    let repo = open_db(&db_path)?;
 
     let issue_id = parse_id(&args.id)?;
     repo.remove_label_from_issue(issue_id, &args.name)?;
@@ -82,9 +81,9 @@ pub fn run_rm(args: &RmArgs, json: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run_list(args: &ListArgs, json: bool) -> anyhow::Result<()> {
-    let bmo_dir = find_bmo_dir()?;
-    let repo = open_db(&bmo_dir.join("issues.db"))?;
+pub fn run_list(args: &ListArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
+    let db_path = find_db(db.as_deref())?;
+    let repo = open_db(&db_path)?;
     let printer = make_printer(if json {
         OutputMode::Json
     } else {
@@ -97,9 +96,9 @@ pub fn run_list(args: &ListArgs, json: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run_delete(args: &DeleteArgs, json: bool) -> anyhow::Result<()> {
-    let bmo_dir = find_bmo_dir()?;
-    let repo = open_db(&bmo_dir.join("issues.db"))?;
+pub fn run_delete(args: &DeleteArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
+    let db_path = find_db(db.as_deref())?;
+    let repo = open_db(&db_path)?;
 
     repo.delete_label(&args.name)?;
 

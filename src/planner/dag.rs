@@ -20,7 +20,14 @@ pub struct Dag {
 
 impl Dag {
     /// Build the DAG from a list of issues and their relations.
-    /// Only `blocks` and `depends_on` edges are used; others are ignored.
+    ///
+    /// All four directional relation kinds contribute an edge: `Blocks` and
+    /// `DependencyOf` add a forward edge `from_id → to_id`; `DependsOn` and
+    /// `BlockedBy` are their semantic inverses and add the mirrored edge
+    /// `to_id → from_id`. This way the same real ordering constraint is
+    /// recorded regardless of which of the two equivalent verbs was used to
+    /// declare the link. `RelatesTo`, `Duplicates`, and `DuplicateOf` are
+    /// informational only and contribute no edge.
     pub fn build(issues: &[Issue], relations: &[Relation]) -> Self {
         let mut nodes: HashMap<i64, DagNode> = issues
             .iter()
@@ -38,8 +45,9 @@ impl Dag {
 
         for rel in relations {
             match rel.kind {
-                RelationKind::Blocks => {
-                    // from blocks to: from → to
+                RelationKind::Blocks | RelationKind::DependencyOf => {
+                    // Blocks: from blocks to → from → to
+                    // DependencyOf: from is a dependency of to → from → to
                     if let Some(node) = nodes.get_mut(&rel.from_id) {
                         node.forward.insert(rel.to_id);
                     }
@@ -47,8 +55,9 @@ impl Dag {
                         node.reverse.insert(rel.from_id);
                     }
                 }
-                RelationKind::DependsOn => {
-                    // from depends_on to: to blocks from → to → from
+                RelationKind::DependsOn | RelationKind::BlockedBy => {
+                    // DependsOn: from depends_on to → to blocks from → to → from
+                    // BlockedBy: from is blocked_by to → to blocks from → to → from
                     if let Some(node) = nodes.get_mut(&rel.to_id) {
                         node.forward.insert(rel.from_id);
                     }
@@ -175,5 +184,71 @@ mod tests {
         let ready = find_ready(&dag);
         // Issue 2 is blocked by issue 1 which is not done
         assert!(ready.iter().all(|i| i.id != 2));
+    }
+
+    #[test]
+    fn dag_construction_blocked_by_mirrors_blocks() {
+        // Issue 2 declares "blocked-by" issue 1 — the natural inverse verb of
+        // `bmo link add 1 blocks 2`. Must produce the identical DAG edge.
+        let issues = vec![
+            make_issue(1, Status::Todo, Priority::High),
+            make_issue(2, Status::Backlog, Priority::Medium),
+        ];
+        let relations = vec![make_relation(2, 1, RelationKind::BlockedBy)];
+        let dag = Dag::build(&issues, &relations);
+
+        assert!(dag.nodes[&1].forward.contains(&2));
+        assert!(dag.nodes[&2].reverse.contains(&1));
+    }
+
+    #[test]
+    fn dag_construction_dependency_of_mirrors_depends_on() {
+        // Issue 2 "depends-on" issue 1 is equivalent to issue 1 being
+        // "dependency-of" issue 2 — both must produce edge 1 → 2.
+        let issues = vec![
+            make_issue(1, Status::Todo, Priority::High),
+            make_issue(2, Status::Backlog, Priority::Medium),
+        ];
+        let depends_on_dag = Dag::build(&issues, &[make_relation(2, 1, RelationKind::DependsOn)]);
+        let dependency_of_dag =
+            Dag::build(&issues, &[make_relation(1, 2, RelationKind::DependencyOf)]);
+
+        assert!(depends_on_dag.nodes[&1].forward.contains(&2));
+        assert!(depends_on_dag.nodes[&2].reverse.contains(&1));
+        assert!(dependency_of_dag.nodes[&1].forward.contains(&2));
+        assert!(dependency_of_dag.nodes[&2].reverse.contains(&1));
+    }
+
+    #[test]
+    fn find_ready_blocked_via_blocked_by_verb() {
+        // Same scenario as find_ready_blocked but declared with the
+        // "blocked-by" verb instead of "blocks" — must be equally enforced.
+        let issues = vec![
+            make_issue(1, Status::InProgress, Priority::High),
+            make_issue(2, Status::Todo, Priority::Medium),
+        ];
+        let relations = vec![make_relation(2, 1, RelationKind::BlockedBy)];
+        let dag = Dag::build(&issues, &relations);
+        let ready = find_ready(&dag);
+        // Issue 2 is blocked-by issue 1 which is not done
+        assert!(ready.iter().all(|i| i.id != 2));
+    }
+
+    #[test]
+    fn informational_relations_ignored() {
+        let issues = vec![
+            make_issue(1, Status::Todo, Priority::High),
+            make_issue(2, Status::Backlog, Priority::Medium),
+        ];
+        let relations = vec![
+            make_relation(1, 2, RelationKind::RelatesTo),
+            make_relation(1, 2, RelationKind::Duplicates),
+            make_relation(1, 2, RelationKind::DuplicateOf),
+        ];
+        let dag = Dag::build(&issues, &relations);
+        assert!(dag.nodes[&1].forward.is_empty());
+        assert!(dag.nodes[&1].reverse.is_empty());
+        assert!(dag.nodes[&2].forward.is_empty());
+        assert!(dag.nodes[&2].reverse.is_empty());
     }
 }

@@ -8,6 +8,6 @@ pub struct CloseArgs {
     pub id: String,
 }
 
-pub fn run(args: &CloseArgs, json: bool) -> anyhow::Result<()> {
-    run_move(&args.id, "done", json)
+pub fn run(args: &CloseArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
+    run_move(&args.id, "done", json, db)
 }

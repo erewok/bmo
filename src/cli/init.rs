@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use crate::config::{Config, init_bmo_dir};
 use crate::db::open_db;
 use clap::Args;
@@ -9,9 +11,32 @@ pub struct InitArgs {
     pub name: Option<String>,
 }
 
-pub fn run(args: &InitArgs, json: bool) -> anyhow::Result<()> {
-    let bmo_dir = init_bmo_dir()?;
-    let db_path = bmo_dir.join("issues.db");
+/// Resolve where to bootstrap the bmo project.
+///
+/// If an explicit `--db`/`BMO_DB` path is given, the project is initialized at
+/// that exact file path instead of the CWD, creating the parent directory if
+/// needed. Otherwise falls back to the existing CWD-based behavior.
+fn resolve_bmo_paths(db: Option<&str>) -> anyhow::Result<(PathBuf, PathBuf)> {
+    match db {
+        Some(path) => {
+            let db_path = PathBuf::from(path);
+            let dir = db_path
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| PathBuf::from("."));
+            std::fs::create_dir_all(&dir)?;
+            Ok((dir, db_path))
+        }
+        None => {
+            let bmo_dir = init_bmo_dir()?;
+            let db_path = bmo_dir.join("issues.db");
+            Ok((bmo_dir, db_path))
+        }
+    }
+}
+
+pub fn run(args: &InitArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
+    let (bmo_dir, db_path) = resolve_bmo_paths(db.as_deref())?;
 
     let already_exists = db_path.exists();
 
