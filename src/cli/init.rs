@@ -14,9 +14,9 @@ pub struct InitArgs {
 /// Resolve where to bootstrap the bmo project.
 ///
 /// If an explicit `--db`/`BMO_DB` path is given, the project is initialized at
-/// that location instead of the CWD, creating the parent directory if needed.
-/// Otherwise falls back to the existing CWD-based behavior.
-fn resolve_bmo_dir(db: Option<&str>) -> anyhow::Result<PathBuf> {
+/// that exact file path instead of the CWD, creating the parent directory if
+/// needed. Otherwise falls back to the existing CWD-based behavior.
+fn resolve_bmo_paths(db: Option<&str>) -> anyhow::Result<(PathBuf, PathBuf)> {
     match db {
         Some(path) => {
             let db_path = PathBuf::from(path);
@@ -25,15 +25,18 @@ fn resolve_bmo_dir(db: Option<&str>) -> anyhow::Result<PathBuf> {
                 .map(Path::to_path_buf)
                 .unwrap_or_else(|| PathBuf::from("."));
             std::fs::create_dir_all(&dir)?;
-            Ok(dir)
+            Ok((dir, db_path))
         }
-        None => init_bmo_dir(),
+        None => {
+            let bmo_dir = init_bmo_dir()?;
+            let db_path = bmo_dir.join("issues.db");
+            Ok((bmo_dir, db_path))
+        }
     }
 }
 
 pub fn run(args: &InitArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
-    let bmo_dir = resolve_bmo_dir(db.as_deref())?;
-    let db_path = bmo_dir.join("issues.db");
+    let (bmo_dir, db_path) = resolve_bmo_paths(db.as_deref())?;
 
     let already_exists = db_path.exists();
 
