@@ -44,28 +44,34 @@ impl Dag {
             .collect();
 
         for rel in relations {
-            match rel.kind {
-                RelationKind::Blocks | RelationKind::DependencyOf => {
-                    // Blocks: from blocks to → from → to
-                    // DependencyOf: from is a dependency of to → from → to
-                    if let Some(node) = nodes.get_mut(&rel.from_id) {
-                        node.forward.insert(rel.to_id);
-                    }
-                    if let Some(node) = nodes.get_mut(&rel.to_id) {
-                        node.reverse.insert(rel.from_id);
-                    }
-                }
-                RelationKind::DependsOn | RelationKind::BlockedBy => {
-                    // DependsOn: from depends_on to → to blocks from → to → from
-                    // BlockedBy: from is blocked_by to → to blocks from → to → from
-                    if let Some(node) = nodes.get_mut(&rel.to_id) {
-                        node.forward.insert(rel.from_id);
-                    }
-                    if let Some(node) = nodes.get_mut(&rel.from_id) {
-                        node.reverse.insert(rel.to_id);
-                    }
-                }
-                _ => {} // relates_to, duplicates, etc. ignored
+            // Normalise all four directional kinds to one (blocker, blocked)
+            // pair, so the same ordering constraint is recorded regardless of
+            // which of the two equivalent verbs declared the link.
+            let (blocker, blocked) = match rel.kind {
+                // Blocks: from blocks to → from → to
+                // DependencyOf: from is a dependency of to → from → to
+                RelationKind::Blocks | RelationKind::DependencyOf => (rel.from_id, rel.to_id),
+                // DependsOn: from depends_on to → to blocks from → to → from
+                // BlockedBy: from is blocked_by to → to blocks from → to → from
+                RelationKind::DependsOn | RelationKind::BlockedBy => (rel.to_id, rel.from_id),
+                // relates_to, duplicates, duplicate_of are informational only
+                _ => continue,
+            };
+
+            // Both endpoints must be nodes. Callers build the graph from a
+            // status-filtered issue list, so an absent endpoint is a `done`
+            // issue: a prerequisite already satisfied, imposing no ordering.
+            // Inserting its id anyway would leave `forward`/`reverse` holding
+            // ids with no entry in `nodes`, which corrupts the topological sort.
+            if !nodes.contains_key(&blocker) || !nodes.contains_key(&blocked) {
+                continue;
+            }
+
+            if let Some(node) = nodes.get_mut(&blocker) {
+                node.forward.insert(blocked);
+            }
+            if let Some(node) = nodes.get_mut(&blocked) {
+                node.reverse.insert(blocker);
             }
         }
 
@@ -171,6 +177,51 @@ mod tests {
         let ready = find_ready(&dag);
         assert_eq!(ready.len(), 1);
         assert_eq!(ready[0].id, 2);
+    }
+
+    // A relation whose other endpoint was filtered out of the issue list (a
+    // `done` issue) must not leave a dangling id in `forward`/`reverse`.
+    // Regression: dangling ids crashed or deadlocked the topological sort.
+    #[test]
+    fn dag_drops_edges_with_a_missing_endpoint() {
+        let issues = vec![make_issue(1, Status::Todo, Priority::High)];
+
+        // Every directional kind, in both directions, with the other endpoint
+        // absent from the node set. None may contribute an edge.
+        let relations = vec![
+            make_relation(1, 2, RelationKind::Blocks),
+            make_relation(3, 1, RelationKind::Blocks),
+            make_relation(1, 4, RelationKind::DependsOn),
+            make_relation(5, 1, RelationKind::DependsOn),
+            make_relation(1, 6, RelationKind::BlockedBy),
+            make_relation(7, 1, RelationKind::BlockedBy),
+            make_relation(1, 8, RelationKind::DependencyOf),
+            make_relation(9, 1, RelationKind::DependencyOf),
+        ];
+        let dag = Dag::build(&issues, &relations);
+
+        assert!(dag.nodes[&1].forward.is_empty());
+        assert!(dag.nodes[&1].reverse.is_empty());
+    }
+
+    // Every id reachable through `forward` or `reverse` must be a key in `nodes`.
+    #[test]
+    fn dag_edge_ids_are_always_nodes() {
+        let issues = vec![
+            make_issue(1, Status::Todo, Priority::High),
+            make_issue(2, Status::Todo, Priority::Medium),
+        ];
+        let relations = vec![
+            make_relation(1, 2, RelationKind::Blocks),
+            make_relation(2, 99, RelationKind::Blocks),
+        ];
+        let dag = Dag::build(&issues, &relations);
+
+        for node in dag.nodes.values() {
+            for id in node.forward.iter().chain(node.reverse.iter()) {
+                assert!(dag.nodes.contains_key(id), "dangling edge id {id}");
+            }
+        }
     }
 
     #[test]
