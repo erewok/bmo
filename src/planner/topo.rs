@@ -32,7 +32,15 @@ pub fn topological_levels(dag: &Dag) -> anyhow::Result<Vec<Vec<i64>>> {
         // Reduce in-degree of forward neighbors
         for &id in &current_level {
             for &fwd in &dag.nodes[&id].forward {
-                let deg = in_degree.get_mut(&fwd).unwrap();
+                // `Dag::build` keeps `forward` free of ids that are not nodes, but
+                // a malformed graph must degrade rather than abort the process.
+                let Some(deg) = in_degree.get_mut(&fwd) else {
+                    continue;
+                };
+                if *deg == 0 {
+                    // Already unblocked and queued; never double-queue it.
+                    continue;
+                }
                 *deg -= 1;
                 if *deg == 0 {
                     queue.push_back(fwd);
@@ -117,6 +125,45 @@ mod tests {
         let mut second = levels[1].clone();
         second.sort();
         assert_eq!(second, vec![2, 3]);
+    }
+
+    // Regression: a relation pointing at an issue that is not a node (because it
+    // is `done` and was filtered out of the issue list) used to panic on the
+    // forward side and produce a phantom "cycle detected" on the reverse side.
+
+    #[test]
+    fn dangling_forward_edge_does_not_panic() {
+        // Live issue 1 blocks issue 2, which is done and so is not a node.
+        let issues = vec![make_issue(1)];
+        let relations = vec![rel(1, 2)];
+        let dag = Dag::build(&issues, &relations);
+
+        let levels = topological_levels(&dag).unwrap();
+        assert_eq!(levels, vec![vec![1]]);
+    }
+
+    #[test]
+    fn dangling_reverse_edge_is_not_a_cycle() {
+        // Issue 1 is done and not a node; live issue 2 was blocked by it.
+        // The prerequisite is satisfied, so 2 belongs in the first phase.
+        let issues = vec![make_issue(2)];
+        let relations = vec![rel(1, 2)];
+        let dag = Dag::build(&issues, &relations);
+
+        let levels = topological_levels(&dag).unwrap();
+        assert_eq!(levels, vec![vec![2]]);
+    }
+
+    #[test]
+    fn satisfied_prerequisite_does_not_shift_phases() {
+        // 1 → 2 → 3 with 1 done: the remaining chain must plan in two phases,
+        // not three, and 2 must be immediately actionable.
+        let issues = vec![make_issue(2), make_issue(3)];
+        let relations = vec![rel(1, 2), rel(2, 3)];
+        let dag = Dag::build(&issues, &relations);
+
+        let levels = topological_levels(&dag).unwrap();
+        assert_eq!(levels, vec![vec![2], vec![3]]);
     }
 
     #[test]

@@ -101,39 +101,6 @@ struct DocketExportBundle {
 
 // ── ID parsing ────────────────────────────────────────────────────────────────
 
-/// Parse a docket ID value that may be a JSON string ("DKT-1") or integer (1).
-///
-/// For string values: strips any leading alphabetic-and-dash prefix and parses
-/// the trailing integer, e.g. "DKT-42" → 42, "BMO-7" → 7, "100" → 100.
-/// For integer values: returns the value directly.
-fn parse_dkt_id_value(v: &serde_json::Value) -> anyhow::Result<i64> {
-    match v {
-        serde_json::Value::Number(n) => n
-            .as_i64()
-            .ok_or_else(|| anyhow::anyhow!("docket ID is not a valid i64: {n}")),
-        serde_json::Value::String(s) => parse_dkt_id(s),
-        other => anyhow::bail!("unexpected docket ID type: {other}"),
-    }
-}
-
-/// Strip any leading alphabetic-and-dash prefix (e.g. "DKT-", "BMO-") and
-/// parse the trailing integer. Returns an error if no numeric suffix is found.
-fn parse_dkt_id(s: &str) -> anyhow::Result<i64> {
-    // Find where the trailing numeric run starts.
-    let numeric_start = s
-        .rfind(|c: char| !c.is_ascii_digit())
-        .map(|i| i + 1)
-        .unwrap_or(0);
-    let digits = &s[numeric_start..];
-    if digits.is_empty() {
-        anyhow::bail!("no numeric suffix in docket ID: {s}");
-    }
-    let n: i64 = digits
-        .parse()
-        .map_err(|_| anyhow::anyhow!("invalid numeric suffix in docket ID: {s}"))?;
-    Ok(n)
-}
-
 /// Canonical string key for an ID value (used as HashMap key).
 fn id_key(v: &serde_json::Value) -> String {
     match v {
@@ -434,42 +401,4 @@ fn import_from_docket(
     }
 
     Ok(())
-}
-
-// ── Tests ─────────────────────────────────────────────────────────────────────
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parse_dkt_id_string_prefix() {
-        assert_eq!(parse_dkt_id("DKT-1").unwrap(), 1);
-        assert_eq!(parse_dkt_id("DKT-42").unwrap(), 42);
-        assert_eq!(parse_dkt_id("BMO-7").unwrap(), 7);
-    }
-
-    #[test]
-    fn parse_dkt_id_numeric_only() {
-        assert_eq!(parse_dkt_id("100").unwrap(), 100);
-    }
-
-    #[test]
-    fn parse_dkt_id_empty_suffix_errors() {
-        assert!(parse_dkt_id("DKT-").is_err());
-        assert!(parse_dkt_id("abc").is_err());
-    }
-
-    #[test]
-    fn parse_dkt_id_value_string() {
-        assert_eq!(
-            parse_dkt_id_value(&serde_json::Value::String("DKT-5".into())).unwrap(),
-            5
-        );
-    }
-
-    #[test]
-    fn parse_dkt_id_value_integer() {
-        assert_eq!(parse_dkt_id_value(&serde_json::json!(3)).unwrap(), 3);
-    }
 }

@@ -411,13 +411,5 @@ impl Printer for HumanPrinter {
     }
 }
 
-fn truncate(s: &str, max: usize) -> String {
-    if s.len() <= max {
-        s.to_string()
-    } else {
-        format!("{}…", &s[..max - 1])
-    }
-}
-
 // Make Color available (suppresses unused import warning)
 const _: Option<Color> = None;
