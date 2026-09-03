@@ -71,7 +71,6 @@ See [docs/pi-extension.md](docs/pi-extension.md) for the full integration guide.
 - [docs/pi-extension.md](docs/pi-extension.md) — pi-code extension and dev-team suite
 - [docs/web.md](docs/web.md) — Web interface
 - [docs/data.md](docs/data.md) — Data storage and database location
-- [docs/migration-from-docket.md](docs/migration-from-docket.md) — Migrating from docket
 - [docs/development.md](docs/development.md) — Building and running tests
 
 ## License

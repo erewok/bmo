@@ -7,5 +7,4 @@
 | [pi-extension.md](pi-extension.md) | pi-code extension — native bmo tools, context injection, and the dev-team agent suite |
 | [web.md](web.md) | Web interface — starting the server, flags, live updates |
 | [data.md](data.md) | Data storage — SQLite location, directory walk behavior, `BMO_DB` env var |
-| [migration-from-docket.md](migration-from-docket.md) | Migrating from docket to bmo |
 | [development.md](development.md) | Building, testing, and running the demo |

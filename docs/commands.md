@@ -287,18 +287,17 @@ bmo export > backup.json
 
 Import issues from a JSON export file.
 
-**Synopsis:** `bmo import <file> [--from-docket]`
+**Synopsis:** `bmo import <file>`
 
 | Argument/Flag | Type | Default | Description |
 |---------------|------|---------|-------------|
 | `<file>` | positional | (required) | Path to the JSON export file |
-| `--from-docket` | bool | false | Treat the file as a docket-format export; remaps `DKT-` IDs to `BMO-` |
 
 **Examples:**
 
 ```
 bmo import backup.json
-bmo import docket-export.json --from-docket --json
+bmo import backup.json --json
 ```
 
 **JSON output** (`data` field):
@@ -307,8 +306,8 @@ bmo import docket-export.json --from-docket --json
 {"issues": 10, "comments": 3}
 ```
 
-The envelope also includes a top-level `"warnings"` array listing any records that were skipped
-due to unresolvable IDs.
+The envelope also includes a top-level `"warnings"` array. It is always empty and is retained
+only so the envelope shape stays stable for existing consumers.
 
 ## bmo truncate
 
