@@ -287,18 +287,17 @@ bmo export > backup.json
 
 Import issues from a JSON export file.
 
-**Synopsis:** `bmo import <file> [--from-docket]`
+**Synopsis:** `bmo import <file>`
 
 | Argument/Flag | Type | Default | Description |
 |---------------|------|---------|-------------|
 | `<file>` | positional | (required) | Path to the JSON export file |
-| `--from-docket` | bool | false | Treat the file as a docket-format export; remaps `DKT-` IDs to `BMO-` |
 
 **Examples:**
 
 ```
 bmo import backup.json
-bmo import docket-export.json --from-docket --json
+bmo import backup.json --json
 ```
 
 **JSON output** (`data` field):
