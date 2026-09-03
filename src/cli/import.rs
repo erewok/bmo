@@ -30,8 +30,10 @@ pub fn run(args: &ImportArgs, json: bool, db: Option<String>) -> anyhow::Result<
     let msg = format!("Imported {imported_issues} issue(s) and {imported_comments} comment(s)");
 
     if json {
-        // `warnings` is retained (always empty) so existing --json consumers
-        // keep seeing the same envelope shape.
+        // The `warnings` field is emitted as an always-empty array purely to
+        // keep the envelope shape stable for existing --json consumers. Only
+        // the removed docket importer ever reported skipped records; the
+        // native importer has no partial-failure mode to warn about.
         let envelope = serde_json::json!({
             "ok": true,
             "data": { "issues": imported_issues, "comments": imported_comments },

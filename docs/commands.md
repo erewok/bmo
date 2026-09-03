@@ -306,8 +306,8 @@ bmo import backup.json --json
 {"issues": 10, "comments": 3}
 ```
 
-The envelope also includes a top-level `"warnings"` array listing any records that were skipped
-due to unresolvable IDs.
+The envelope also includes a top-level `"warnings"` array. It is always empty and is retained
+only so the envelope shape stays stable for existing consumers.
 
 ## bmo truncate
 
