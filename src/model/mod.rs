@@ -15,4 +15,4 @@ pub use conflict::{ConflictingIssue, FileConflict};
 pub use file::{IssueFile, IssueFileIden};
 pub use issue::{Issue, IssueFilter, IssueIden, Kind, Priority, Status};
 pub use label::{Label, LabelIden};
-pub use relation::{Relation, RelationIden, RelationKind};
+pub use relation::{IssueRelation, Relation, RelationIden, RelationKind};

@@ -16,18 +16,21 @@
 // The downstream tests (2–4) need a cyclic graph that bypassed the insertion
 // guard, so they inject the cycle directly into the SQLite DB.
 
-use assert_cmd::cargo;
 use assert_cmd::prelude::*;
+use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 use rusqlite::Connection;
 use std::process::Command;
 use tempfile::TempDir;
 
+mod common;
+use common::bmo_command;
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 fn setup() -> TempDir {
     let dir = TempDir::new().unwrap();
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .current_dir(dir.path())
         .arg("init")
         .assert()
@@ -36,7 +39,7 @@ fn setup() -> TempDir {
 }
 
 fn bmo(dir: &TempDir) -> Command {
-    let mut cmd = Command::new(cargo::cargo_bin!("bmo"));
+    let mut cmd = bmo_command();
     cmd.current_dir(dir.path());
     cmd
 }
@@ -109,6 +112,34 @@ fn setup_with_injected_blocked_by_cycle() -> TempDir {
     create_issues(&dir, 2);
     link(&dir, &["BMO-1".into(), "BMO-2".into()], 1, "blocked-by", 2);
     inject_blocked_by_edge(&dir, 2, 1);
+    dir
+}
+
+/// Build a dir where issues 1 and 2 form the only cycle (1→2 via the CLI,
+/// 2→1 injected), issues 3 and 4 are merely downstream of it (2→3→4), and
+/// issue 5 is unrelated.
+fn setup_with_injected_cycle_and_downstream_issues() -> TempDir {
+    let dir = setup();
+    let ids = create_issues(&dir, 5);
+    link(&dir, &ids, 1, "blocks", 2);
+    link(&dir, &ids, 2, "blocks", 3);
+    link(&dir, &ids, 3, "blocks", 4);
+    inject_blocks_edge(&dir, 2, 1);
+    dir
+}
+
+/// Build a dir with two cycles that share no issue: 1 ⇄ 2 (2→1 injected) and
+/// 3→4→5→3 (5→3 injected). Issue 6 is merely downstream of the second cycle
+/// (5→6) and issue 7 is unrelated.
+fn setup_with_two_injected_independent_cycles() -> TempDir {
+    let dir = setup();
+    let ids = create_issues(&dir, 7);
+    link(&dir, &ids, 1, "blocks", 2);
+    link(&dir, &ids, 3, "blocks", 4);
+    link(&dir, &ids, 4, "blocks", 5);
+    link(&dir, &ids, 5, "blocks", 6);
+    inject_blocks_edge(&dir, 2, 1);
+    inject_blocks_edge(&dir, 5, 3);
     dir
 }
 
@@ -250,6 +281,33 @@ fn link_add_rejects_dag_cycles() {
     }
 }
 
+#[test]
+fn link_add_rejects_a_self_link_of_every_kind() {
+    let dir = setup();
+    create_issues(&dir, 1);
+
+    for rel in [
+        "blocks",
+        "blocked-by",
+        "depends-on",
+        "dependency-of",
+        "relates-to",
+        "duplicates",
+        "duplicate-of",
+    ] {
+        bmo(&dir)
+            .args(["issue", "link", "add", "BMO-1", rel, "BMO-1"])
+            .assert()
+            .code(3) // ErrorCode::Validation
+            .stderr(contains("Cannot link an issue to itself"));
+    }
+    bmo(&dir)
+        .args(["issue", "link", "list", "BMO-1"])
+        .assert()
+        .success()
+        .stdout(contains("No relations."));
+}
+
 // These cases are allowed, but for two different reasons:
 //
 // - `blocked-by`/`dependency-of` ARE DAG edges (they mirror `blocks`/
@@ -384,6 +442,62 @@ fn agent_init_fails_loud_on_blocked_by_cycle() {
         .assert()
         .failure()
         .stderr(contains("cycle"));
+}
+
+// The error must name the issues on the cycle and nothing else: issues that
+// are only blocked by the cycle are a consequence of it, not part of it.
+#[test]
+fn cycle_error_names_only_cycle_members_not_downstream_issues() {
+    let dir = setup_with_injected_cycle_and_downstream_issues();
+
+    for command in ["plan", "next", "agent-init"] {
+        bmo(&dir)
+            .args([command])
+            .assert()
+            .failure()
+            .stderr(contains(
+                "cycle detected in dependency graph, involves issues: BMO-1 → BMO-2 → BMO-1\n",
+            ))
+            .stderr(contains("BMO-3").not())
+            .stderr(contains("BMO-4").not())
+            .stderr(contains("BMO-5").not());
+    }
+}
+
+const TWO_INDEPENDENT_CYCLES_ERROR: &str = "cycle detected in dependency graph, involves issues: \
+     BMO-1 → BMO-2 → BMO-1; BMO-3 → BMO-4 → BMO-5 → BMO-3\n\
+     hint: `A → B` means A blocks B. Pick an edge `A → B` on a cycle and run `bmo link list A` \
+     to find the relations that create it, then `bmo link remove <relation id>` for each one \
+     (an edge can be stored more than once, e.g. as both `A blocks B` and `B depends-on A`). \
+     Repeat until no cycle remains.";
+
+// Two cycles that share nothing must be reported as two groups, each in
+// blocking order, followed by the way out.
+#[test]
+fn cycle_error_groups_independent_cycles_and_hints_how_to_break_them() {
+    let dir = setup_with_two_injected_independent_cycles();
+
+    for command in ["plan", "next", "agent-init"] {
+        bmo(&dir)
+            .args([command])
+            .assert()
+            .failure()
+            .stderr(contains(format!("error: {TWO_INDEPENDENT_CYCLES_ERROR}\n")))
+            .stderr(contains("BMO-6").not())
+            .stderr(contains("BMO-7").not());
+    }
+}
+
+#[test]
+fn plan_json_error_field_carries_the_grouped_cycle_message() {
+    let dir = setup_with_two_injected_independent_cycles();
+
+    let output = bmo(&dir).args(["plan", "--json"]).output().unwrap();
+    assert!(!output.status.success());
+    let envelope: serde_json::Value = serde_json::from_slice(&output.stderr).unwrap();
+
+    assert_eq!(envelope["ok"], false);
+    assert_eq!(envelope["error"], TWO_INDEPENDENT_CYCLES_ERROR);
 }
 
 // ── 3. Equivalence: a relation and its semantic inverse produce the same plan ─

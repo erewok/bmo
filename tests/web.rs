@@ -4,7 +4,7 @@ use tempfile::TempDir;
 use tower::ServiceExt;
 
 use bmo::db::{CreateIssueInput, Repository, open_db};
-use bmo::model::{Kind, Priority, Status};
+use bmo::model::{Kind, Priority, RelationKind, Status};
 use bmo::web::{build_router, test_state};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -254,6 +254,101 @@ async fn issue_detail_page_renders_markdown() {
     );
 }
 
+/// Fetch `/issues/{id}` and return the markup of its relation list.
+async fn relation_list_html(app: axum::Router, id: i64) -> String {
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/issues/{id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let html = std::str::from_utf8(&body).unwrap();
+    let (_, after_open) = html
+        .split_once(r#"<ul class="relation-list">"#)
+        .expect("issue page has a relation list");
+    let (list, _) = after_open.split_once("</ul>").unwrap();
+    list.to_string()
+}
+
+#[tokio::test]
+async fn issue_detail_page_on_the_to_side_links_the_other_issue_with_the_inverted_verb() {
+    let cases = [
+        (RelationKind::Blocks, "← blocked by"),
+        (RelationKind::BlockedBy, "→ blocks"),
+        (RelationKind::DependsOn, "← dependency of"),
+        (RelationKind::DependencyOf, "→ depends on"),
+        (RelationKind::RelatesTo, "↔ relates to"),
+        (RelationKind::Duplicates, "← duplicate of"),
+        (RelationKind::DuplicateOf, "→ duplicates"),
+    ];
+    for (stored_kind, expected_verb) in cases {
+        let (app, dir, _shutdown) = setup_app();
+        let from_id = create_test_issue(&dir);
+        let shown_id = create_test_issue(&dir);
+        open_db(&dir.path().join("issues.db"))
+            .unwrap()
+            .add_relation(from_id, stored_kind, shown_id)
+            .unwrap();
+
+        let list = relation_list_html(app, shown_id).await;
+
+        let expected = format!(r#"{expected_verb} <a href="/issues/{from_id}">BMO-{from_id}</a>"#);
+        assert!(
+            list.contains(&expected),
+            "stored kind {stored_kind}: expected `{expected}` in `{list}`"
+        );
+        assert_eq!(
+            list.matches("<li>").count(),
+            1,
+            "stored kind {stored_kind}: `{list}`"
+        );
+        assert!(
+            !list.contains(&format!(r#"href="/issues/{shown_id}""#)),
+            "stored kind {stored_kind}: relation links to the shown issue itself in `{list}`"
+        );
+    }
+}
+
+#[tokio::test]
+async fn issue_detail_page_renders_each_relation_from_the_shown_issue() {
+    let (app, dir, _shutdown) = setup_app();
+    let first = create_test_issue(&dir);
+    let second = create_test_issue(&dir);
+    let third = create_test_issue(&dir);
+    let repo = open_db(&dir.path().join("issues.db")).unwrap();
+    repo.add_relation(first, RelationKind::Blocks, second)
+        .unwrap();
+    repo.add_relation(third, RelationKind::BlockedBy, second)
+        .unwrap();
+
+    let blocked_by_first = format!(r#"← blocked by <a href="/issues/{first}">BMO-{first}</a>"#);
+    let blocks_third = format!(r#"→ blocks <a href="/issues/{third}">BMO-{third}</a>"#);
+    let blocks_second = format!(r#"→ blocks <a href="/issues/{second}">BMO-{second}</a>"#);
+    let blocked_by_second = format!(r#"← blocked by <a href="/issues/{second}">BMO-{second}</a>"#);
+
+    let list = relation_list_html(app.clone(), second).await;
+    assert!(list.contains(&blocked_by_first), "`{list}`");
+    assert!(list.contains(&blocks_third), "`{list}`");
+    assert!(
+        !list.contains(&format!(r#"href="/issues/{second}""#)),
+        "relation links to the shown issue itself in `{list}`"
+    );
+
+    let list = relation_list_html(app.clone(), first).await;
+    assert!(list.contains(&blocks_second), "`{list}`");
+
+    let list = relation_list_html(app, third).await;
+    assert!(list.contains(&blocked_by_second), "`{list}`");
+}
+
 #[tokio::test]
 async fn board_page_renders() {
     let (app, _dir, _shutdown) = setup_app();
@@ -279,4 +374,21 @@ async fn board_page_renders() {
         content_type.contains("text/html"),
         "expected text/html content-type, got: {content_type}"
     );
+}
+
+#[tokio::test]
+async fn issue_detail_page_flags_a_self_relation() {
+    let (app, dir, _shutdown) = setup_app();
+    let id = create_test_issue(&dir);
+    // `add_relation` rejects self-links, so write the row directly.
+    rusqlite::Connection::open(dir.path().join("issues.db"))
+        .unwrap()
+        .execute(
+            "INSERT INTO issue_relations (from_id, to_id, relation) VALUES (?1, ?1, 'blocks')",
+            rusqlite::params![id],
+        )
+        .unwrap();
+
+    let list = relation_list_html(app, id).await;
+    assert!(list.contains("(invalid self-link)"), "`{list}`");
 }

@@ -124,16 +124,25 @@ Print the bmo version string.
 
 No flags beyond globals.
 
+The top-level flags `bmo --version` and `bmo -V` print the same line as `bmo version`
+(`bmo <version>`) and exit 0. They need no subcommand and no bmo database, and always print the
+plain-text line; use `bmo version --json` for JSON output. They are accepted only before a
+subcommand: `bmo -V list` prints the version without running `list`, while `bmo list -V` is rejected
+as an unexpected argument (exit code 2). There is no `-v` version flag; `bmo -v` is rejected with
+exit code 2.
+
 **Example:**
 
 ```
 bmo version
+bmo --version
+bmo -V
 ```
 
 **JSON output** (`data` field):
 
 ```json
-{"version": "0.1.0"}
+{"version": "0.9.0"}
 ```
 
 ## bmo stats
@@ -462,6 +471,19 @@ bmo show 5 --json
 }
 ```
 
+Each relation is the stored row plus a `view` object that reads it from the requested issue:
+
+```json
+{
+  "id": 1, "from_id": 1, "to_id": 2, "kind": "blocks",
+  "view": { "kind": "blocked-by", "other_id": 1, "self_link": false }
+}
+```
+
+`view.kind` is the requested issue's relation to `view.other_id`. `view.self_link` is `true` for a
+relation of an issue to itself; `link add` rejects these, so one only appears in a database written
+by an older bmo or by direct SQL, and should be removed with `bmo link remove <id>`.
+
 ### bmo issue edit
 
 Edit one or more fields on an existing issue. Only the fields you supply are updated.
@@ -627,6 +649,8 @@ bmo log 3 --limit 20 --json
 
 Show the blocking/blocked-by dependency graph for an issue.
 
+The human output lists related issues in two groups, `← blocked by:` and `→ blocks:`. `depends-on` and `dependency-of` relations are folded into the same two groups as `blocked-by` and `blocks`, whichever endpoint of the relation the issue is. `relates-to`, `duplicates` and `duplicate-of` relations are not shown.
+
 **Synopsis:** `bmo graph <id>`
 
 | Argument | Type | Description |
@@ -648,6 +672,8 @@ bmo graph 1 --json
   "relations": [ <relation>, ... ]
 }
 ```
+
+Each relation has the same shape as in `bmo show --json`, including `view`.
 
 ### bmo issue comment add
 
@@ -777,6 +803,9 @@ Add a directional relationship between two issues.
 | `<from-id>` | positional (required) | Source issue ID |
 | `<relation>` | positional (required) | Relation kind (see enumerated values above) |
 | `<to-id>` | positional (required) | Target issue ID |
+
+Rejected with exit code 3 when `<from-id>` and `<to-id>` are the same issue, for every relation
+kind, or when a directional relation would create a dependency cycle.
 
 **Examples:**
 

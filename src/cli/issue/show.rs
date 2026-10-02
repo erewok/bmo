@@ -32,7 +32,11 @@ pub fn run(args: &ShowArgs, json: bool, db: Option<String>) -> anyhow::Result<()
         }
         Ok(issue) => {
             let sub_issues = repo.get_sub_issues(id)?;
-            let relations = repo.list_relations(id)?;
+            let relations = repo
+                .list_relations(id)?
+                .into_iter()
+                .map(|relation| relation.with_view_from(id))
+                .collect();
             let comments = repo.list_comments(id)?;
             let labels = repo.list_issue_labels(id)?;
 

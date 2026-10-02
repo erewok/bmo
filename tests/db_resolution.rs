@@ -11,19 +11,20 @@
 //! walk-up via `find_bmo_dir()` instead of honoring `--db`/`BMO_DB`, these tests would
 //! observe the *real* dir's DB being mutated/read instead of the scratch one.
 
-use assert_cmd::cargo;
 use assert_cmd::prelude::*;
 use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use tempfile::TempDir;
+
+mod common;
+use common::bmo_command;
 
 /// Create a new TempDir with `bmo init` already run inside it, so it has its own
 /// `.bmo/issues.db`.
 fn init_project() -> TempDir {
     let dir = TempDir::new().unwrap();
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .current_dir(dir.path())
         .arg("init")
         .assert()
@@ -39,7 +40,7 @@ fn issues_db_path(dir: &TempDir) -> PathBuf {
 /// preceding command actually touched, independent of the mechanism (--db/BMO_DB/CWD)
 /// under test.
 fn stats_total(db_path: &Path) -> i64 {
-    let output = Command::new(cargo::cargo_bin!("bmo"))
+    let output = bmo_command()
         .args(["stats", "--json", "--db"])
         .arg(db_path)
         .output()
@@ -62,7 +63,7 @@ fn db_flag_create_targets_scratch_leaves_real_untouched() {
     let scratch = init_project();
     let scratch_db = issues_db_path(&scratch);
 
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .current_dir(real.path())
         .args(["create", "--title", "Scratch create"])
         .arg("--db")
@@ -89,7 +90,7 @@ fn db_flag_list_reads_scratch_leaves_real_untouched() {
     let scratch = init_project();
     let scratch_db = issues_db_path(&scratch);
 
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .args(["create", "--title", "Scratch list target"])
         .arg("--db")
         .arg(&scratch_db)
@@ -97,7 +98,7 @@ fn db_flag_list_reads_scratch_leaves_real_untouched() {
         .success();
 
     // list --db from inside the real dir should see the scratch issue.
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .current_dir(real.path())
         .arg("list")
         .arg("--db")
@@ -107,7 +108,7 @@ fn db_flag_list_reads_scratch_leaves_real_untouched() {
         .stdout(contains("Scratch list target"));
 
     // The real dir's own db (CWD walk-up, no --db) must not show the scratch issue.
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .current_dir(real.path())
         .arg("list")
         .assert()
@@ -121,14 +122,14 @@ fn db_flag_board_shows_scratch_leaves_real_untouched() {
     let scratch = init_project();
     let scratch_db = issues_db_path(&scratch);
 
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .args(["create", "--title", "Scratch board issue"])
         .arg("--db")
         .arg(&scratch_db)
         .assert()
         .success();
 
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .current_dir(real.path())
         .arg("board")
         .arg("--db")
@@ -137,7 +138,7 @@ fn db_flag_board_shows_scratch_leaves_real_untouched() {
         .success()
         .stdout(contains("Scratch board issue"));
 
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .current_dir(real.path())
         .arg("board")
         .assert()
@@ -151,14 +152,14 @@ fn db_flag_next_reads_scratch_leaves_real_untouched() {
     let scratch = init_project();
     let scratch_db = issues_db_path(&scratch);
 
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .args(["create", "--title", "Scratch next issue"])
         .arg("--db")
         .arg(&scratch_db)
         .assert()
         .success();
 
-    let output = Command::new(cargo::cargo_bin!("bmo"))
+    let output = bmo_command()
         .current_dir(real.path())
         .args(["next", "--json", "--db"])
         .arg(&scratch_db)
@@ -172,7 +173,7 @@ fn db_flag_next_reads_scratch_leaves_real_untouched() {
     );
 
     // Real dir's own db (no --db) has zero issues, so next must report none.
-    let output = Command::new(cargo::cargo_bin!("bmo"))
+    let output = bmo_command()
         .current_dir(real.path())
         .args(["next", "--json"])
         .output()
@@ -190,14 +191,14 @@ fn db_flag_stats_reads_scratch_leaves_real_untouched() {
     let scratch = init_project();
     let scratch_db = issues_db_path(&scratch);
 
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .args(["create", "--title", "Scratch stats issue"])
         .arg("--db")
         .arg(&scratch_db)
         .assert()
         .success();
 
-    let output = Command::new(cargo::cargo_bin!("bmo"))
+    let output = bmo_command()
         .current_dir(real.path())
         .args(["stats", "--json", "--db"])
         .arg(&scratch_db)
@@ -219,14 +220,14 @@ fn db_flag_plan_reads_scratch_leaves_real_untouched() {
     let scratch = init_project();
     let scratch_db = issues_db_path(&scratch);
 
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .args(["create", "--title", "Scratch plan issue"])
         .arg("--db")
         .arg(&scratch_db)
         .assert()
         .success();
 
-    let output = Command::new(cargo::cargo_bin!("bmo"))
+    let output = bmo_command()
         .current_dir(real.path())
         .args(["plan", "--json", "--db"])
         .arg(&scratch_db)
@@ -250,7 +251,7 @@ fn bmo_db_env_create_targets_scratch_leaves_real_untouched() {
     let scratch = init_project();
     let scratch_db = issues_db_path(&scratch);
 
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .current_dir(real.path())
         .args(["create", "--title", "BMO_DB create"])
         .env("BMO_DB", &scratch_db)
@@ -276,13 +277,13 @@ fn bmo_db_env_list_reads_scratch_leaves_real_untouched() {
     let scratch = init_project();
     let scratch_db = issues_db_path(&scratch);
 
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .args(["create", "--title", "BMO_DB list target"])
         .env("BMO_DB", &scratch_db)
         .assert()
         .success();
 
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .current_dir(real.path())
         .arg("list")
         .env("BMO_DB", &scratch_db)
@@ -290,7 +291,7 @@ fn bmo_db_env_list_reads_scratch_leaves_real_untouched() {
         .success()
         .stdout(contains("BMO_DB list target"));
 
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .current_dir(real.path())
         .arg("list")
         .assert()
@@ -304,13 +305,13 @@ fn bmo_db_env_board_shows_scratch_leaves_real_untouched() {
     let scratch = init_project();
     let scratch_db = issues_db_path(&scratch);
 
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .args(["create", "--title", "BMO_DB board issue"])
         .env("BMO_DB", &scratch_db)
         .assert()
         .success();
 
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .current_dir(real.path())
         .arg("board")
         .env("BMO_DB", &scratch_db)
@@ -318,7 +319,7 @@ fn bmo_db_env_board_shows_scratch_leaves_real_untouched() {
         .success()
         .stdout(contains("BMO_DB board issue"));
 
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .current_dir(real.path())
         .arg("board")
         .assert()
@@ -332,13 +333,13 @@ fn bmo_db_env_next_reads_scratch_leaves_real_untouched() {
     let scratch = init_project();
     let scratch_db = issues_db_path(&scratch);
 
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .args(["create", "--title", "BMO_DB next issue"])
         .env("BMO_DB", &scratch_db)
         .assert()
         .success();
 
-    let output = Command::new(cargo::cargo_bin!("bmo"))
+    let output = bmo_command()
         .current_dir(real.path())
         .args(["next", "--json"])
         .env("BMO_DB", &scratch_db)
@@ -347,7 +348,7 @@ fn bmo_db_env_next_reads_scratch_leaves_real_untouched() {
     let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert!(!json["data"].as_array().unwrap().is_empty());
 
-    let output = Command::new(cargo::cargo_bin!("bmo"))
+    let output = bmo_command()
         .current_dir(real.path())
         .args(["next", "--json"])
         .output()
@@ -365,13 +366,13 @@ fn bmo_db_env_stats_reads_scratch_leaves_real_untouched() {
     let scratch = init_project();
     let scratch_db = issues_db_path(&scratch);
 
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .args(["create", "--title", "BMO_DB stats issue"])
         .env("BMO_DB", &scratch_db)
         .assert()
         .success();
 
-    let output = Command::new(cargo::cargo_bin!("bmo"))
+    let output = bmo_command()
         .current_dir(real.path())
         .args(["stats", "--json"])
         .env("BMO_DB", &scratch_db)
@@ -389,13 +390,13 @@ fn bmo_db_env_plan_reads_scratch_leaves_real_untouched() {
     let scratch = init_project();
     let scratch_db = issues_db_path(&scratch);
 
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .args(["create", "--title", "BMO_DB plan issue"])
         .env("BMO_DB", &scratch_db)
         .assert()
         .success();
 
-    let output = Command::new(cargo::cargo_bin!("bmo"))
+    let output = bmo_command()
         .current_dir(real.path())
         .args(["plan", "--json"])
         .env("BMO_DB", &scratch_db)
@@ -418,7 +419,7 @@ fn db_flag_overrides_bmo_db_env_var() {
     let flag_db = issues_db_path(&flag_scratch);
 
     // Both BMO_DB and --db are set, to two *different* paths. --db must win.
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .current_dir(real.path())
         .args(["create", "--title", "Precedence test"])
         .arg("--db")
@@ -451,7 +452,7 @@ fn db_flag_overrides_bmo_db_env_var() {
 fn no_db_flag_or_env_falls_back_to_cwd_walk_up() {
     let real = init_project();
 
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .current_dir(real.path())
         .args(["create", "--title", "CWD walk-up issue"])
         .assert()
@@ -464,7 +465,7 @@ fn no_db_flag_or_env_falls_back_to_cwd_walk_up() {
         "with neither --db nor BMO_DB set, the CWD-discovered .bmo/issues.db should be used"
     );
 
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .current_dir(real.path())
         .arg("list")
         .assert()
@@ -480,7 +481,7 @@ fn issue_create_long_form_respects_db_flag() {
     let scratch = init_project();
     let scratch_db = issues_db_path(&scratch);
 
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .current_dir(real.path())
         .args(["issue", "create", "--title", "Long-form scratch issue"])
         .arg("--db")
@@ -507,13 +508,13 @@ fn issue_list_long_form_respects_bmo_db_env() {
     let scratch = init_project();
     let scratch_db = issues_db_path(&scratch);
 
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .args(["issue", "create", "--title", "Long-form BMO_DB issue"])
         .env("BMO_DB", &scratch_db)
         .assert()
         .success();
 
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .current_dir(real.path())
         .args(["issue", "list"])
         .env("BMO_DB", &scratch_db)
@@ -521,7 +522,7 @@ fn issue_list_long_form_respects_bmo_db_env() {
         .success()
         .stdout(contains("Long-form BMO_DB issue"));
 
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .current_dir(real.path())
         .args(["issue", "list"])
         .assert()

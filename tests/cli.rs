@@ -1,13 +1,15 @@
-use assert_cmd::cargo;
 use assert_cmd::prelude::*;
 use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 use std::process::Command;
 use tempfile::TempDir;
 
+mod common;
+use common::bmo_command;
+
 fn setup() -> TempDir {
     let dir = TempDir::new().unwrap();
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .current_dir(dir.path())
         .arg("init")
         .assert()
@@ -16,7 +18,7 @@ fn setup() -> TempDir {
 }
 
 fn bmo(dir: &TempDir) -> Command {
-    let mut cmd = Command::new(cargo::cargo_bin!("bmo"));
+    let mut cmd = bmo_command();
     cmd.current_dir(dir.path());
     cmd
 }
@@ -26,11 +28,97 @@ fn bmo(dir: &TempDir) -> Command {
 #[test]
 fn version_prints_version() {
     let version = env!("CARGO_PKG_VERSION");
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .arg("version")
         .assert()
         .success()
         .stdout(contains(version));
+}
+
+#[test]
+fn version_flags_print_the_same_line_as_the_version_subcommand() {
+    let dir = TempDir::new().unwrap();
+    let expected = format!("bmo {}\n", env!("CARGO_PKG_VERSION"));
+    for invocation in ["version", "--version", "-V"] {
+        bmo_command()
+            .current_dir(dir.path())
+            .arg(invocation)
+            .assert()
+            .success()
+            .stdout(expected.clone());
+    }
+}
+
+#[test]
+fn version_subcommand_json_emits_envelope() {
+    let version = env!("CARGO_PKG_VERSION");
+    let output = bmo_command().args(["version", "--json"]).output().unwrap();
+    assert!(output.status.success());
+    let envelope: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        envelope,
+        serde_json::json!({ "ok": true, "data": { "version": version }, "message": version })
+    );
+}
+
+#[test]
+fn version_flag_prints_plain_text_even_with_json_flag() {
+    let dir = TempDir::new().unwrap();
+    let expected = format!("bmo {}\n", env!("CARGO_PKG_VERSION"));
+    for invocation in [["--json", "--version"], ["--version", "--json"]] {
+        bmo_command()
+            .current_dir(dir.path())
+            .args(invocation)
+            .assert()
+            .success()
+            .stdout(expected.clone());
+    }
+}
+
+#[test]
+fn version_flag_before_a_subcommand_prints_version_without_running_it() {
+    let dir = setup();
+    bmo(&dir)
+        .args(["create", "--title", "Listed issue"])
+        .assert()
+        .success();
+    bmo(&dir)
+        .arg("list")
+        .assert()
+        .success()
+        .stdout(contains("Listed issue"));
+
+    bmo(&dir)
+        .args(["-V", "list"])
+        .assert()
+        .success()
+        .stdout(format!("bmo {}\n", env!("CARGO_PKG_VERSION")));
+}
+
+// `-v` is conventionally `--verbose`, so it is not an alias for `--version`.
+#[test]
+fn lowercase_v_is_not_a_version_flag() {
+    let dir = TempDir::new().unwrap();
+    bmo_command()
+        .current_dir(dir.path())
+        .arg("-v")
+        .assert()
+        .code(2)
+        .stdout("")
+        .stderr(contains("unexpected argument"));
+}
+
+#[test]
+fn version_flag_after_a_subcommand_is_rejected() {
+    let dir = setup();
+    for flag in ["-V", "--version"] {
+        bmo(&dir)
+            .args(["list", flag])
+            .assert()
+            .code(2)
+            .stdout("")
+            .stderr(contains("unexpected argument"));
+    }
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -38,7 +126,7 @@ fn version_prints_version() {
 #[test]
 fn init_creates_bmo_dir() {
     let dir = TempDir::new().unwrap();
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .current_dir(dir.path())
         .arg("init")
         .assert()
@@ -503,8 +591,7 @@ fn truncate_confirmation_prompt_aborts_on_no() {
         .success();
 
     // Send "n" to the confirmation prompt via assert_cmd::Command which supports write_stdin
-    assert_cmd::Command::cargo_bin("bmo")
-        .unwrap()
+    assert_cmd::Command::from_std(bmo_command())
         .current_dir(dir.path())
         .args(["truncate"])
         .write_stdin("n\n")

@@ -28,15 +28,16 @@
     <ul class="relation-list">
       {% for r in relations %}
       <li>
-        {% if r.kind == "blocks" %}→ blocks <a href="/issues/{{ r.to_id }}">BMO-{{ r.to_id }}</a>
-        {% elif r.kind == "blocked-by" %}← blocked by <a href="/issues/{{ r.to_id }}">BMO-{{ r.to_id }}</a>
-        {% elif r.kind == "depends-on" %}→ depends on <a href="/issues/{{ r.to_id }}">BMO-{{ r.to_id }}</a>
-        {% elif r.kind == "dependency-of" %}← dependency of <a href="/issues/{{ r.to_id }}">BMO-{{ r.to_id }}</a>
-        {% elif r.kind == "relates-to" %}↔ relates to <a href="/issues/{{ r.to_id }}">BMO-{{ r.to_id }}</a>
-        {% elif r.kind == "duplicates" %}→ duplicates <a href="/issues/{{ r.to_id }}">BMO-{{ r.to_id }}</a>
-        {% elif r.kind == "duplicate-of" %}← duplicate of <a href="/issues/{{ r.to_id }}">BMO-{{ r.to_id }}</a>
-        {% else %}{{ r.kind }} <a href="/issues/{{ r.to_id }}">BMO-{{ r.to_id }}</a>
+        {% if r.kind == "blocks" %}→ blocks <a href="/issues/{{ r.other_id }}">BMO-{{ r.other_id }}</a>
+        {% elif r.kind == "blocked-by" %}← blocked by <a href="/issues/{{ r.other_id }}">BMO-{{ r.other_id }}</a>
+        {% elif r.kind == "depends-on" %}→ depends on <a href="/issues/{{ r.other_id }}">BMO-{{ r.other_id }}</a>
+        {% elif r.kind == "dependency-of" %}← dependency of <a href="/issues/{{ r.other_id }}">BMO-{{ r.other_id }}</a>
+        {% elif r.kind == "relates-to" %}↔ relates to <a href="/issues/{{ r.other_id }}">BMO-{{ r.other_id }}</a>
+        {% elif r.kind == "duplicates" %}→ duplicates <a href="/issues/{{ r.other_id }}">BMO-{{ r.other_id }}</a>
+        {% elif r.kind == "duplicate-of" %}← duplicate of <a href="/issues/{{ r.other_id }}">BMO-{{ r.other_id }}</a>
+        {% else %}{{ r.kind }} <a href="/issues/{{ r.other_id }}">BMO-{{ r.other_id }}</a>
         {% endif %}
+        {% if r.self_link %}(invalid self-link){% endif %}
       </li>
       {% endfor %}
     </ul>
