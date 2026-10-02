@@ -126,6 +126,21 @@ fn setup_with_injected_cycle_and_downstream_issues() -> TempDir {
     dir
 }
 
+/// Build a dir with two cycles that share no issue: 1 ⇄ 2 (2→1 injected) and
+/// 3→4→5→3 (5→3 injected). Issue 6 is merely downstream of the second cycle
+/// (5→6) and issue 7 is unrelated.
+fn setup_with_two_injected_independent_cycles() -> TempDir {
+    let dir = setup();
+    let ids = create_issues(&dir, 7);
+    link(&dir, &ids, 1, "blocks", 2);
+    link(&dir, &ids, 3, "blocks", 4);
+    link(&dir, &ids, 4, "blocks", 5);
+    link(&dir, &ids, 5, "blocks", 6);
+    inject_blocks_edge(&dir, 2, 1);
+    inject_blocks_edge(&dir, 5, 3);
+    dir
+}
+
 /// Run `bmo plan --json` (optionally with extra args, e.g. `--no-links`) and
 /// parse the JSON envelope.
 fn plan_json(dir: &TempDir, extra_args: &[&str]) -> serde_json::Value {
@@ -412,12 +427,46 @@ fn cycle_error_names_only_cycle_members_not_downstream_issues() {
             .assert()
             .failure()
             .stderr(contains(
-                "cycle detected in dependency graph, involves issues: BMO-1, BMO-2\n",
+                "cycle detected in dependency graph, involves issues: BMO-1 → BMO-2 → BMO-1\n",
             ))
             .stderr(contains("BMO-3").not())
             .stderr(contains("BMO-4").not())
             .stderr(contains("BMO-5").not());
     }
+}
+
+const TWO_INDEPENDENT_CYCLES_ERROR: &str = "cycle detected in dependency graph, involves issues: \
+     BMO-1 → BMO-2 → BMO-1; BMO-3 → BMO-4 → BMO-5 → BMO-3\n\
+     hint: `A → B` means A blocks B. Run `bmo link list BMO-1` to find the relation id of a \
+     link on the cycle, then `bmo link remove <relation id>` to break it.";
+
+// Two cycles that share nothing must be reported as two groups, each in
+// blocking order, followed by the way out.
+#[test]
+fn cycle_error_groups_independent_cycles_and_hints_how_to_break_them() {
+    let dir = setup_with_two_injected_independent_cycles();
+
+    for command in ["plan", "next", "agent-init"] {
+        bmo(&dir)
+            .args([command])
+            .assert()
+            .failure()
+            .stderr(contains(format!("error: {TWO_INDEPENDENT_CYCLES_ERROR}\n")))
+            .stderr(contains("BMO-6").not())
+            .stderr(contains("BMO-7").not());
+    }
+}
+
+#[test]
+fn plan_json_error_field_carries_the_grouped_cycle_message() {
+    let dir = setup_with_two_injected_independent_cycles();
+
+    let output = bmo(&dir).args(["plan", "--json"]).output().unwrap();
+    assert!(!output.status.success());
+    let envelope: serde_json::Value = serde_json::from_slice(&output.stderr).unwrap();
+
+    assert_eq!(envelope["ok"], false);
+    assert_eq!(envelope["error"], TWO_INDEPENDENT_CYCLES_ERROR);
 }
 
 // ── 3. Equivalence: a relation and its semantic inverse produce the same plan ─

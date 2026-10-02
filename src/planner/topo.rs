@@ -4,8 +4,8 @@ use super::dag::Dag;
 
 /// Topological sort using Kahn's algorithm.
 /// Returns levels (phases) in order, where each level can run in parallel.
-/// Returns Err if a cycle is detected, naming only the issues on the cycle
-/// itself (not issues merely downstream of it).
+/// Returns Err if a cycle is detected, naming each cycle separately and only
+/// the issues on a cycle (not issues merely downstream of one).
 pub fn topological_levels(dag: &Dag) -> anyhow::Result<Vec<Vec<i64>>> {
     // in_degree = number of unresolved blockers for each node
     let mut in_degree: HashMap<i64, usize> = dag
@@ -53,30 +53,37 @@ pub fn topological_levels(dag: &Dag) -> anyhow::Result<Vec<Vec<i64>>> {
     }
 
     if processed < dag.nodes.len() {
-        let cycle_members = cycle_member_ids(dag);
-        if cycle_members.is_empty() {
+        let cycles = cycle_groups(dag);
+        let Some(first_cycle) = cycles.first() else {
             // Only reachable when `forward` and `reverse` disagree, which
             // `Dag::build` never produces but the public fields allow.
             anyhow::bail!(
                 "cycle detected in dependency graph, but no cycle could be traced; \
                  issues left unplanned: {}",
-                display_ids(dag, &still_blocked_ids(&in_degree))
+                display_ids(dag, &still_blocked_ids(&in_degree), ", ")
             );
-        }
+        };
         anyhow::bail!(
-            "cycle detected in dependency graph, involves issues: {}",
-            display_ids(dag, &cycle_members)
+            "cycle detected in dependency graph, involves issues: {}\n\
+             hint: `A → B` means A blocks B. Run `bmo link list {}` to find the relation id \
+             of a link on the cycle, then `bmo link remove <relation id>` to break it.",
+            cycles
+                .iter()
+                .map(|cycle| cycle.display(dag))
+                .collect::<Vec<_>>()
+                .join("; "),
+            dag.nodes[&first_cycle.lowest_id()].issue.display_id()
         );
     }
 
     Ok(levels)
 }
 
-fn display_ids(dag: &Dag, ids: &[i64]) -> String {
+fn display_ids(dag: &Dag, ids: &[i64], separator: &str) -> String {
     ids.iter()
         .map(|id| dag.nodes[id].issue.display_id())
         .collect::<Vec<_>>()
-        .join(", ")
+        .join(separator)
 }
 
 /// Ids of the issues whose blockers were never all resolved, in ascending order.
@@ -90,37 +97,159 @@ fn still_blocked_ids(in_degree: &HashMap<i64, usize>) -> Vec<i64> {
     ids
 }
 
-/// Ids of the issues that lie on a dependency cycle, in ascending order.
-fn cycle_member_ids(dag: &Dag) -> Vec<i64> {
-    let mut ids: Vec<i64> = dag
-        .nodes
-        .keys()
-        .copied()
-        .filter(|&id| blocks_itself_transitively(dag, id))
-        .collect();
-    ids.sort_unstable();
-    ids
+/// The issues of one strongly connected component that contains a cycle.
+enum CycleGroup {
+    /// A single cycle, in blocking order starting at its lowest id.
+    Simple(Vec<i64>),
+    /// Several cycles sharing issues, in ascending id order.
+    Overlapping(Vec<i64>),
 }
 
-fn blocks_itself_transitively(dag: &Dag, start: i64) -> bool {
-    let mut seen: HashSet<i64> = HashSet::new();
-    let mut pending = vec![start];
+impl CycleGroup {
+    fn lowest_id(&self) -> i64 {
+        match self {
+            CycleGroup::Simple(ids) | CycleGroup::Overlapping(ids) => ids[0],
+        }
+    }
 
-    while let Some(id) = pending.pop() {
-        let Some(node) = dag.nodes.get(&id) else {
-            continue;
-        };
-        for &blocked in &node.forward {
-            if blocked == start {
-                return true;
+    fn display(&self, dag: &Dag) -> String {
+        match self {
+            CycleGroup::Simple(cycle_order) => {
+                let mut closed_cycle = cycle_order.clone();
+                closed_cycle.push(cycle_order[0]);
+                display_ids(dag, &closed_cycle, " → ")
             }
-            if seen.insert(blocked) {
-                pending.push(blocked);
+            CycleGroup::Overlapping(members) => {
+                format!("{} (overlapping cycles)", display_ids(dag, members, ", "))
+            }
+        }
+    }
+}
+
+/// Every dependency cycle in the graph, ordered by lowest member id.
+fn cycle_groups(dag: &Dag) -> Vec<CycleGroup> {
+    let mut groups: Vec<CycleGroup> = strongly_connected_components(dag)
+        .into_iter()
+        .filter_map(|members| cycle_group(dag, members))
+        .collect();
+    groups.sort_unstable_by_key(CycleGroup::lowest_id);
+    groups
+}
+
+/// Classifies one strongly connected component, or `None` if it is a lone
+/// issue that does not block itself.
+fn cycle_group(dag: &Dag, mut members: Vec<i64>) -> Option<CycleGroup> {
+    members.sort_unstable();
+    let lowest = members[0];
+    if members.len() == 1 && !dag.nodes[&lowest].forward.contains(&lowest) {
+        return None;
+    }
+
+    // A component prints as one simple cycle only if every member blocks
+    // exactly one other member of the same component; that single successor
+    // is the next issue in the printed cycle order.
+    let mut next_in_cycle: HashMap<i64, i64> = HashMap::new();
+    for &member in &members {
+        let mut successors_in_component = dag.nodes[&member]
+            .forward
+            .iter()
+            .filter(|blocked_id| members.binary_search(blocked_id).is_ok());
+        match (
+            successors_in_component.next(),
+            successors_in_component.next(),
+        ) {
+            (Some(&successor), None) => next_in_cycle.insert(member, successor),
+            _ => return Some(CycleGroup::Overlapping(members)),
+        };
+    }
+
+    let cycle_order = std::iter::successors(Some(lowest), |id| next_in_cycle.get(id).copied())
+        .take(members.len())
+        .collect();
+    Some(CycleGroup::Simple(cycle_order))
+}
+
+fn strongly_connected_components(dag: &Dag) -> Vec<Vec<i64>> {
+    let mut search = ComponentSearch::default();
+    for &root in dag.nodes.keys() {
+        if !search.discovery_index.contains_key(&root) {
+            search.explore_from(dag, root);
+        }
+    }
+    search.components
+}
+
+/// Tarjan's strongly-connected-components search over `forward` edges.
+#[derive(Default)]
+struct ComponentSearch {
+    discovery_index: HashMap<i64, usize>,
+    lowest_reachable_index: HashMap<i64, usize>,
+    unassigned: Vec<i64>,
+    is_unassigned: HashSet<i64>,
+    components: Vec<Vec<i64>>,
+}
+
+impl ComponentSearch {
+    // Iterative rather than recursive: a recursive walk overflows the call
+    // stack on a dependency chain a few thousand issues long.
+    fn explore_from(&mut self, dag: &Dag, root: i64) {
+        self.discover(root);
+        let mut path = vec![(root, dag.nodes[&root].forward.iter())];
+
+        while let Some((id, unexplored)) = path.last_mut() {
+            let id = *id;
+            let Some(&blocked) = unexplored.next() else {
+                path.pop();
+                let parent = path.last().map(|(parent, _)| *parent);
+                self.finish(id, parent);
+                continue;
+            };
+            let Some(blocked_node) = dag.nodes.get(&blocked) else {
+                continue;
+            };
+            if !self.discovery_index.contains_key(&blocked) {
+                self.discover(blocked);
+                path.push((blocked, blocked_node.forward.iter()));
+            } else if self.is_unassigned.contains(&blocked) {
+                let blocked_index = self.discovery_index[&blocked];
+                self.lower_reachable_index(id, blocked_index);
             }
         }
     }
 
-    false
+    fn discover(&mut self, id: i64) {
+        let index = self.discovery_index.len();
+        self.discovery_index.insert(id, index);
+        self.lowest_reachable_index.insert(id, index);
+        self.unassigned.push(id);
+        self.is_unassigned.insert(id);
+    }
+
+    fn lower_reachable_index(&mut self, id: i64, candidate: usize) {
+        self.lowest_reachable_index
+            .entry(id)
+            .and_modify(|lowest| *lowest = (*lowest).min(candidate));
+    }
+
+    fn finish(&mut self, id: i64, parent: Option<i64>) {
+        let lowest_reachable = self.lowest_reachable_index[&id];
+        if let Some(parent) = parent {
+            self.lower_reachable_index(parent, lowest_reachable);
+        }
+        if lowest_reachable != self.discovery_index[&id] {
+            return;
+        }
+
+        let mut component = Vec::new();
+        while let Some(member) = self.unassigned.pop() {
+            self.is_unassigned.remove(&member);
+            component.push(member);
+            if member == id {
+                break;
+            }
+        }
+        self.components.push(component);
+    }
 }
 
 #[cfg(test)]
@@ -318,10 +447,21 @@ mod tests {
         assert_eq!(levels[2], vec![3]);
     }
 
+    fn cycle_error_naming(groups: &str, first_issue: &str) -> String {
+        format!(
+            "cycle detected in dependency graph, involves issues: {groups}\n\
+             hint: `A → B` means A blocks B. Run `bmo link list {first_issue}` to find the \
+             relation id of a link on the cycle, then `bmo link remove <relation id>` to \
+             break it."
+        )
+    }
+
     // 1 ⇄ 2 is the only cycle. 3 and 4 are merely downstream of it, 5 is
     // unrelated and 6 is upstream; none of those four lie on a cycle.
-    const CYCLE_1_2_ONLY: &str =
-        "cycle detected in dependency graph, involves issues: BMO-1, BMO-2";
+    const CYCLE_1_2_ONLY: &str = "cycle detected in dependency graph, involves issues: \
+         BMO-1 → BMO-2 → BMO-1\n\
+         hint: `A → B` means A blocks B. Run `bmo link list BMO-1` to find the relation id \
+         of a link on the cycle, then `bmo link remove <relation id>` to break it.";
 
     #[test]
     fn cycle_error_lists_only_cycle_members() {
@@ -354,6 +494,32 @@ mod tests {
     }
 
     #[test]
+    fn cycle_error_prints_independent_cycles_as_separate_groups() {
+        // 1 ⇄ 2 and 3 → 4 → 5 → 3 share no issue and no edge.
+        let relations = [rel(1, 2), rel(2, 1), rel(3, 4), rel(4, 5), rel(5, 3)];
+        assert_eq!(
+            cycle_error(5, &relations),
+            "cycle detected in dependency graph, involves issues: \
+             BMO-1 → BMO-2 → BMO-1; BMO-3 → BMO-4 → BMO-5 → BMO-3\n\
+             hint: `A → B` means A blocks B. Run `bmo link list BMO-1` to find the relation id \
+             of a link on the cycle, then `bmo link remove <relation id>` to break it."
+        );
+    }
+
+    #[test]
+    fn cycle_error_orders_groups_by_lowest_member_id() {
+        // 6 → 2 → 6 is declared after 9 → 4 → 9 and 3 → 3, but holds the lowest id.
+        let relations = [rel(9, 4), rel(4, 9), rel(3, 3), rel(6, 2), rel(2, 6)];
+        assert_eq!(
+            cycle_error(9, &relations),
+            cycle_error_naming(
+                "BMO-2 → BMO-6 → BMO-2; BMO-3 → BMO-3; BMO-4 → BMO-9 → BMO-4",
+                "BMO-2"
+            )
+        );
+    }
+
+    #[test]
     fn cycle_error_omits_issue_between_two_cycles() {
         // 1 ⇄ 2 → 3 → 4 ⇄ 5: issue 3 is downstream of one cycle and upstream
         // of the other, but no path leads from 3 back to 3.
@@ -367,17 +533,27 @@ mod tests {
         ];
         assert_eq!(
             cycle_error(5, &relations),
-            "cycle detected in dependency graph, involves issues: BMO-1, BMO-2, BMO-4, BMO-5"
+            cycle_error_naming("BMO-1 → BMO-2 → BMO-1; BMO-4 → BMO-5 → BMO-4", "BMO-1")
         );
     }
 
     #[test]
-    fn cycle_error_lists_every_member_of_a_long_cycle_in_id_order() {
+    fn cycle_error_prints_a_long_cycle_in_blocking_order_from_its_lowest_id() {
         // 7 → 3 → 5 → 7, with 9 downstream.
         let relations = [rel(7, 3), rel(3, 5), rel(5, 7), rel(5, 9)];
         assert_eq!(
             cycle_error(9, &relations),
-            "cycle detected in dependency graph, involves issues: BMO-3, BMO-5, BMO-7"
+            cycle_error_naming("BMO-3 → BMO-5 → BMO-7 → BMO-3", "BMO-3")
+        );
+    }
+
+    #[test]
+    fn cycle_error_follows_blocking_direction_not_id_order() {
+        // 1 → 3 → 2 → 1: ascending id order would misstate who blocks whom.
+        let relations = [rel(1, 3), rel(3, 2), rel(2, 1)];
+        assert_eq!(
+            cycle_error(3, &relations),
+            cycle_error_naming("BMO-1 → BMO-3 → BMO-2 → BMO-1", "BMO-1")
         );
     }
 
@@ -386,8 +562,61 @@ mod tests {
         let relations = [rel(1, 1), rel(1, 2)];
         assert_eq!(
             cycle_error(2, &relations),
-            "cycle detected in dependency graph, involves issues: BMO-1"
+            cycle_error_naming("BMO-1 → BMO-1", "BMO-1")
         );
+    }
+
+    #[test]
+    fn cycle_error_marks_cycles_sharing_an_issue_as_overlapping() {
+        // 1 ⇄ 2 and 2 ⇄ 3 share issue 2; 4 is downstream.
+        let relations = [rel(1, 2), rel(2, 1), rel(2, 3), rel(3, 2), rel(3, 4)];
+        assert_eq!(
+            cycle_error(4, &relations),
+            cycle_error_naming("BMO-1, BMO-2, BMO-3 (overlapping cycles)", "BMO-1")
+        );
+    }
+
+    #[test]
+    fn cycle_error_marks_a_self_loop_inside_a_larger_cycle_as_overlapping() {
+        let relations = [rel(1, 2), rel(2, 1), rel(2, 2)];
+        assert_eq!(
+            cycle_error(2, &relations),
+            cycle_error_naming("BMO-1, BMO-2 (overlapping cycles)", "BMO-1")
+        );
+    }
+
+    #[test]
+    fn cycle_error_mixes_simple_and_overlapping_groups() {
+        // 2 ⇄ 3 ⇄ 4 overlap; 5 → 6 → 5 is a separate simple cycle; 1 is upstream.
+        let relations = [
+            rel(1, 2),
+            rel(2, 3),
+            rel(3, 2),
+            rel(3, 4),
+            rel(4, 3),
+            rel(6, 5),
+            rel(5, 6),
+        ];
+        assert_eq!(
+            cycle_error(6, &relations),
+            cycle_error_naming(
+                "BMO-2, BMO-3, BMO-4 (overlapping cycles); BMO-5 → BMO-6 → BMO-5",
+                "BMO-2"
+            )
+        );
+    }
+
+    #[test]
+    fn cycle_error_hint_names_both_remediation_commands() {
+        // The cycle is 3 ⇄ 4; 1 and 2 are upstream and must not be suggested.
+        let relations = [rel(1, 2), rel(2, 3), rel(3, 4), rel(4, 3)];
+        let message = cycle_error(4, &relations);
+        let hint = message.lines().nth(1).expect("hint line missing");
+
+        assert!(hint.starts_with("hint: "), "{hint}");
+        assert!(hint.contains("`bmo link list BMO-3`"), "{hint}");
+        assert!(hint.contains("`bmo link remove <relation id>`"), "{hint}");
+        assert_eq!(message.lines().count(), 2);
     }
 
     #[test]
@@ -409,6 +638,63 @@ mod tests {
     }
 
     #[test]
+    fn inconsistent_graph_error_has_no_hint() {
+        let issues: Vec<Issue> = (1..=2).map(make_issue).collect();
+        let mut dag = Dag::build(&issues, &[]);
+        dag.nodes.get_mut(&2).unwrap().reverse.insert(1);
+
+        let message = topological_levels(&dag).unwrap_err().to_string();
+        assert!(!message.contains("hint"), "{message}");
+        assert!(!message.contains("bmo link"), "{message}");
+        assert_eq!(message.lines().count(), 1);
+    }
+
+    #[test]
+    fn graph_with_a_cycle_and_an_inconsistency_reports_only_the_cycle() {
+        // 1 ⇄ 2 is a real cycle; 4 records 3 as a blocker with no matching
+        // forward edge.
+        let issues: Vec<Issue> = (1..=4).map(make_issue).collect();
+        let mut dag = Dag::build(&issues, &[rel(1, 2), rel(2, 1)]);
+        dag.nodes.get_mut(&4).unwrap().reverse.insert(3);
+
+        assert_eq!(
+            topological_levels(&dag).unwrap_err().to_string(),
+            cycle_error_naming("BMO-1 → BMO-2 → BMO-1", "BMO-1")
+        );
+    }
+
+    #[test]
+    fn cycle_error_tolerates_forward_edges_to_missing_issues() {
+        // 1 ⇄ 2, with 2 also recording a blocked issue that is not a node.
+        let issues: Vec<Issue> = (1..=2).map(make_issue).collect();
+        let mut dag = Dag::build(&issues, &[rel(1, 2), rel(2, 1)]);
+        dag.nodes.get_mut(&2).unwrap().forward.insert(99);
+
+        assert_eq!(
+            topological_levels(&dag).unwrap_err().to_string(),
+            cycle_error_naming("BMO-1 → BMO-2 → BMO-1", "BMO-1")
+        );
+    }
+
+    #[test]
+    fn cycle_error_survives_a_cycle_thousands_of_issues_long() {
+        let issue_count = 20_000;
+        let relations: Vec<Relation> = (1..=issue_count)
+            .map(|id| rel(id, id % issue_count + 1))
+            .collect();
+        let message = cycle_error(issue_count, &relations);
+
+        assert!(
+            message.starts_with(
+                "cycle detected in dependency graph, involves issues: BMO-1 → BMO-2 → BMO-3 → "
+            ),
+            "{}",
+            &message[..120]
+        );
+        assert!(message.contains(" → BMO-20000 → BMO-1\nhint: "));
+    }
+
+    #[test]
     fn cycle_error_is_identical_across_repeated_runs() {
         // Each `Dag::build` gets freshly seeded hash maps, so any dependence
         // on hash iteration order shows up as differing messages.
@@ -419,11 +705,20 @@ mod tests {
             rel(16, 4),
             rel(16, 20),
             rel(20, 24),
+            rel(3, 2),
+            rel(2, 3),
+            rel(2, 1),
+            rel(1, 2),
+            rel(22, 22),
         ];
         let first = cycle_error(24, &relations);
         assert_eq!(
             first,
-            "cycle detected in dependency graph, involves issues: BMO-4, BMO-8, BMO-12, BMO-16"
+            cycle_error_naming(
+                "BMO-1, BMO-2, BMO-3 (overlapping cycles); \
+                 BMO-4 → BMO-8 → BMO-12 → BMO-16 → BMO-4; BMO-22 → BMO-22",
+                "BMO-1"
+            )
         );
         for _ in 0..50 {
             assert_eq!(cycle_error(24, &relations), first);

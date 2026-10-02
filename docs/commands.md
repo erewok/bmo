@@ -636,6 +636,8 @@ bmo log 3 --limit 20 --json
 
 Show the blocking/blocked-by dependency graph for an issue.
 
+The human output lists related issues in two groups, `← blocked by:` and `→ blocks:`. `depends-on` and `dependency-of` relations are folded into the same two groups as `blocked-by` and `blocks`, whichever endpoint of the relation the issue is. `relates-to`, `duplicates` and `duplicate-of` relations are not shown.
+
 **Synopsis:** `bmo graph <id>`
 
 | Argument | Type | Description |
