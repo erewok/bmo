@@ -257,14 +257,16 @@ impl Printer for HumanPrinter {
         if !detail.relations.is_empty() {
             println!("\n  Relations:");
             for rel in &detail.relations {
-                let direction = match rel.kind {
-                    RelationKind::Blocks => format!("→ blocks BMO-{}", rel.to_id),
-                    RelationKind::BlockedBy => format!("← blocked by BMO-{}", rel.to_id),
-                    RelationKind::DependsOn => format!("→ depends on BMO-{}", rel.to_id),
-                    RelationKind::DependencyOf => format!("← dependency of BMO-{}", rel.to_id),
-                    RelationKind::RelatesTo => format!("↔ relates to BMO-{}", rel.to_id),
-                    RelationKind::Duplicates => format!("→ duplicates BMO-{}", rel.to_id),
-                    RelationKind::DuplicateOf => format!("← duplicate of BMO-{}", rel.to_id),
+                let view = rel.viewed_from(issue.id);
+                let other = view.other_id;
+                let direction = match view.kind {
+                    RelationKind::Blocks => format!("→ blocks BMO-{other}"),
+                    RelationKind::BlockedBy => format!("← blocked by BMO-{other}"),
+                    RelationKind::DependsOn => format!("→ depends on BMO-{other}"),
+                    RelationKind::DependencyOf => format!("← dependency of BMO-{other}"),
+                    RelationKind::RelatesTo => format!("↔ relates to BMO-{other}"),
+                    RelationKind::Duplicates => format!("→ duplicates BMO-{other}"),
+                    RelationKind::DuplicateOf => format!("← duplicate of BMO-{other}"),
                 };
                 println!("    {direction}");
             }

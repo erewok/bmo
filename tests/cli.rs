@@ -33,6 +33,84 @@ fn version_prints_version() {
         .stdout(contains(version));
 }
 
+#[test]
+fn version_flags_print_the_same_line_as_the_version_subcommand() {
+    let dir = TempDir::new().unwrap();
+    let expected = format!("bmo {}\n", env!("CARGO_PKG_VERSION"));
+    for invocation in ["version", "--version", "-V", "-v"] {
+        Command::new(cargo::cargo_bin!("bmo"))
+            .current_dir(dir.path())
+            .env_remove("BMO_DB")
+            .arg(invocation)
+            .assert()
+            .success()
+            .stdout(expected.clone());
+    }
+}
+
+#[test]
+fn version_subcommand_json_emits_envelope() {
+    let version = env!("CARGO_PKG_VERSION");
+    let output = Command::new(cargo::cargo_bin!("bmo"))
+        .args(["version", "--json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let envelope: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        envelope,
+        serde_json::json!({ "ok": true, "data": { "version": version }, "message": version })
+    );
+}
+
+#[test]
+fn version_flag_prints_plain_text_even_with_json_flag() {
+    let dir = TempDir::new().unwrap();
+    let expected = format!("bmo {}\n", env!("CARGO_PKG_VERSION"));
+    for invocation in [["--json", "--version"], ["--version", "--json"]] {
+        Command::new(cargo::cargo_bin!("bmo"))
+            .current_dir(dir.path())
+            .env_remove("BMO_DB")
+            .args(invocation)
+            .assert()
+            .success()
+            .stdout(expected.clone());
+    }
+}
+
+#[test]
+fn version_flag_before_a_subcommand_prints_version_without_running_it() {
+    let dir = setup();
+    bmo(&dir)
+        .args(["create", "--title", "Listed issue"])
+        .assert()
+        .success();
+    bmo(&dir)
+        .arg("list")
+        .assert()
+        .success()
+        .stdout(contains("Listed issue"));
+
+    bmo(&dir)
+        .args(["-v", "list"])
+        .assert()
+        .success()
+        .stdout(format!("bmo {}\n", env!("CARGO_PKG_VERSION")));
+}
+
+#[test]
+fn version_flag_after_a_subcommand_is_rejected() {
+    let dir = setup();
+    for flag in ["-v", "-V", "--version"] {
+        bmo(&dir)
+            .args(["list", flag])
+            .assert()
+            .code(2)
+            .stdout("")
+            .stderr(contains("unexpected argument"));
+    }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 #[test]

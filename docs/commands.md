@@ -124,16 +124,25 @@ Print the bmo version string.
 
 No flags beyond globals.
 
+The top-level flags `bmo --version`, `bmo -V`, and `bmo -v` print the same line as `bmo version`
+(`bmo <version>`) and exit 0. They need no subcommand and no bmo database, and always print the
+plain-text line; use `bmo version --json` for JSON output. They are accepted only before a
+subcommand: `bmo -v list` prints the version without running `list`, while `bmo list -v` is rejected
+as an unexpected argument (exit code 2).
+
 **Example:**
 
 ```
 bmo version
+bmo --version
+bmo -V
+bmo -v
 ```
 
 **JSON output** (`data` field):
 
 ```json
-{"version": "0.1.0"}
+{"version": "0.8.0"}
 ```
 
 ## bmo stats

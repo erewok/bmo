@@ -148,7 +148,7 @@ pub async fn issue_detail_page(
                 .collect::<Result<Vec<_>, _>>()?;
             let relations_json: Vec<serde_json::Value> = relations
                 .iter()
-                .map(|r| serde_json::to_value(r).map_err(|e| anyhow::anyhow!(e)))
+                .map(|r| serde_json::to_value(r.viewed_from(id)).map_err(|e| anyhow::anyhow!(e)))
                 .collect::<Result<Vec<_>, _>>()?;
             let tmpl = state.env.get_template("issue.html")?;
             let html = tmpl.render(context!(issue => issue_json, comments => comments_json, relations => relations_json))?;

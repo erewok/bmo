@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{ArgAction, Parser, Subcommand};
 
 pub mod agent_init;
 pub mod board;
@@ -15,8 +15,19 @@ pub mod version;
 pub mod web;
 
 #[derive(Parser)]
-#[command(name = "bmo", about = "Local-first issue tracker for AI agents")]
+#[command(
+    name = "bmo",
+    about = "Local-first issue tracker for AI agents",
+    version,
+    disable_version_flag = true
+)]
 pub struct Cli {
+    /// Print the bmo version
+    // `Option<bool>` is clap's required destination type for `ArgAction::Version`;
+    // the action prints the version and exits before this field is ever read.
+    #[arg(short = 'V', visible_short_alias = 'v', long, action = ArgAction::Version)]
+    version: Option<bool>,
+
     /// Output results as JSON
     #[arg(long, global = true)]
     pub json: bool,

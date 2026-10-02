@@ -18,6 +18,7 @@
 
 use assert_cmd::cargo;
 use assert_cmd::prelude::*;
+use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 use rusqlite::Connection;
 use std::process::Command;
@@ -109,6 +110,19 @@ fn setup_with_injected_blocked_by_cycle() -> TempDir {
     create_issues(&dir, 2);
     link(&dir, &["BMO-1".into(), "BMO-2".into()], 1, "blocked-by", 2);
     inject_blocked_by_edge(&dir, 2, 1);
+    dir
+}
+
+/// Build a dir where issues 1 and 2 form the only cycle (1→2 via the CLI,
+/// 2→1 injected), issues 3 and 4 are merely downstream of it (2→3→4), and
+/// issue 5 is unrelated.
+fn setup_with_injected_cycle_and_downstream_issues() -> TempDir {
+    let dir = setup();
+    let ids = create_issues(&dir, 5);
+    link(&dir, &ids, 1, "blocks", 2);
+    link(&dir, &ids, 2, "blocks", 3);
+    link(&dir, &ids, 3, "blocks", 4);
+    inject_blocks_edge(&dir, 2, 1);
     dir
 }
 
@@ -384,6 +398,26 @@ fn agent_init_fails_loud_on_blocked_by_cycle() {
         .assert()
         .failure()
         .stderr(contains("cycle"));
+}
+
+// The error must name the issues on the cycle and nothing else: issues that
+// are only blocked by the cycle are a consequence of it, not part of it.
+#[test]
+fn cycle_error_names_only_cycle_members_not_downstream_issues() {
+    let dir = setup_with_injected_cycle_and_downstream_issues();
+
+    for command in ["plan", "next", "agent-init"] {
+        bmo(&dir)
+            .args([command])
+            .assert()
+            .failure()
+            .stderr(contains(
+                "cycle detected in dependency graph, involves issues: BMO-1, BMO-2\n",
+            ))
+            .stderr(contains("BMO-3").not())
+            .stderr(contains("BMO-4").not())
+            .stderr(contains("BMO-5").not());
+    }
 }
 
 // ── 3. Equivalence: a relation and its semantic inverse produce the same plan ─
