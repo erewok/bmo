@@ -142,7 +142,7 @@ bmo -v
 **JSON output** (`data` field):
 
 ```json
-{"version": "0.8.0"}
+{"version": "0.9.0"}
 ```
 
 ## bmo stats

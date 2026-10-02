@@ -437,8 +437,10 @@ fn cycle_error_names_only_cycle_members_not_downstream_issues() {
 
 const TWO_INDEPENDENT_CYCLES_ERROR: &str = "cycle detected in dependency graph, involves issues: \
      BMO-1 → BMO-2 → BMO-1; BMO-3 → BMO-4 → BMO-5 → BMO-3\n\
-     hint: `A → B` means A blocks B. Run `bmo link list BMO-1` to find the relation id of a \
-     link on the cycle, then `bmo link remove <relation id>` to break it.";
+     hint: `A → B` means A blocks B. Pick an edge on a cycle and run `bmo link list BMO-1` \
+     to find its relation ids, then `bmo link remove <relation id>` for every relation that \
+     creates that edge (an edge can be stored more than once, e.g. as both `A blocks B` and \
+     `B depends-on A`). Repeat until no cycle remains.";
 
 // Two cycles that share nothing must be reported as two groups, each in
 // blocking order, followed by the way out.

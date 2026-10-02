@@ -65,8 +65,10 @@ pub fn topological_levels(dag: &Dag) -> anyhow::Result<Vec<Vec<i64>>> {
         };
         anyhow::bail!(
             "cycle detected in dependency graph, involves issues: {}\n\
-             hint: `A → B` means A blocks B. Run `bmo link list {}` to find the relation id \
-             of a link on the cycle, then `bmo link remove <relation id>` to break it.",
+             hint: `A → B` means A blocks B. Pick an edge on a cycle and run `bmo link list {}` \
+             to find its relation ids, then `bmo link remove <relation id>` for every relation \
+             that creates that edge (an edge can be stored more than once, e.g. as both \
+             `A blocks B` and `B depends-on A`). Repeat until no cycle remains.",
             cycles
                 .iter()
                 .map(|cycle| cycle.display(dag))
@@ -101,14 +103,18 @@ fn still_blocked_ids(in_degree: &HashMap<i64, usize>) -> Vec<i64> {
 enum CycleGroup {
     /// A single cycle, in blocking order starting at its lowest id.
     Simple(Vec<i64>),
-    /// Several cycles sharing issues, in ascending id order.
-    Overlapping(Vec<i64>),
+    /// Several cycles sharing issues, as every `(blocker, blocked)` edge
+    /// between members of the component, in ascending order.
+    Overlapping(Vec<(i64, i64)>),
 }
 
 impl CycleGroup {
     fn lowest_id(&self) -> i64 {
         match self {
-            CycleGroup::Simple(ids) | CycleGroup::Overlapping(ids) => ids[0],
+            CycleGroup::Simple(ids) => ids[0],
+            // Every member of a cycle blocks some member, so the lowest member
+            // is the blocker of the first edge.
+            CycleGroup::Overlapping(edges) => edges[0].0,
         }
     }
 
@@ -119,8 +125,13 @@ impl CycleGroup {
                 closed_cycle.push(cycle_order[0]);
                 display_ids(dag, &closed_cycle, " → ")
             }
-            CycleGroup::Overlapping(members) => {
-                format!("{} (overlapping cycles)", display_ids(dag, members, ", "))
+            CycleGroup::Overlapping(edges) => {
+                let edges = edges
+                    .iter()
+                    .map(|&(blocker, blocked)| display_ids(dag, &[blocker, blocked], " → "))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{edges} (overlapping cycles)")
             }
         }
     }
@@ -159,7 +170,7 @@ fn cycle_group(dag: &Dag, mut members: Vec<i64>) -> Option<CycleGroup> {
             successors_in_component.next(),
         ) {
             (Some(&successor), None) => next_in_cycle.insert(member, successor),
-            _ => return Some(CycleGroup::Overlapping(members)),
+            _ => return Some(CycleGroup::Overlapping(edges_within(dag, &members))),
         };
     }
 
@@ -167,6 +178,22 @@ fn cycle_group(dag: &Dag, mut members: Vec<i64>) -> Option<CycleGroup> {
         .take(members.len())
         .collect();
     Some(CycleGroup::Simple(cycle_order))
+}
+
+/// Every `(blocker, blocked)` edge between two of `sorted_members`, in ascending order.
+fn edges_within(dag: &Dag, sorted_members: &[i64]) -> Vec<(i64, i64)> {
+    let mut edges: Vec<(i64, i64)> = sorted_members
+        .iter()
+        .flat_map(|&blocker| {
+            dag.nodes[&blocker]
+                .forward
+                .iter()
+                .filter(|blocked_id| sorted_members.binary_search(blocked_id).is_ok())
+                .map(move |&blocked| (blocker, blocked))
+        })
+        .collect();
+    edges.sort_unstable();
+    edges
 }
 
 fn strongly_connected_components(dag: &Dag) -> Vec<Vec<i64>> {
@@ -450,23 +477,24 @@ mod tests {
     fn cycle_error_naming(groups: &str, first_issue: &str) -> String {
         format!(
             "cycle detected in dependency graph, involves issues: {groups}\n\
-             hint: `A → B` means A blocks B. Run `bmo link list {first_issue}` to find the \
-             relation id of a link on the cycle, then `bmo link remove <relation id>` to \
-             break it."
+             hint: `A → B` means A blocks B. Pick an edge on a cycle and run \
+             `bmo link list {first_issue}` to find its relation ids, then \
+             `bmo link remove <relation id>` for every relation that creates that edge \
+             (an edge can be stored more than once, e.g. as both `A blocks B` and \
+             `B depends-on A`). Repeat until no cycle remains."
         )
     }
 
     // 1 ⇄ 2 is the only cycle. 3 and 4 are merely downstream of it, 5 is
     // unrelated and 6 is upstream; none of those four lie on a cycle.
-    const CYCLE_1_2_ONLY: &str = "cycle detected in dependency graph, involves issues: \
-         BMO-1 → BMO-2 → BMO-1\n\
-         hint: `A → B` means A blocks B. Run `bmo link list BMO-1` to find the relation id \
-         of a link on the cycle, then `bmo link remove <relation id>` to break it.";
+    fn cycle_1_2_only() -> String {
+        cycle_error_naming("BMO-1 → BMO-2 → BMO-1", "BMO-1")
+    }
 
     #[test]
     fn cycle_error_lists_only_cycle_members() {
         let relations = [rel(1, 2), rel(2, 1), rel(2, 3), rel(3, 4), rel(6, 1)];
-        assert_eq!(cycle_error(6, &relations), CYCLE_1_2_ONLY);
+        assert_eq!(cycle_error(6, &relations), cycle_1_2_only());
     }
 
     #[test]
@@ -478,7 +506,7 @@ mod tests {
             rel_of_kind(4, 3, RelationKind::BlockedBy),
             rel_of_kind(1, 6, RelationKind::BlockedBy),
         ];
-        assert_eq!(cycle_error(6, &relations), CYCLE_1_2_ONLY);
+        assert_eq!(cycle_error(6, &relations), cycle_1_2_only());
     }
 
     #[test]
@@ -490,7 +518,7 @@ mod tests {
             rel_of_kind(3, 4, RelationKind::Blocks),
             rel_of_kind(1, 6, RelationKind::DependsOn),
         ];
-        assert_eq!(cycle_error(6, &relations), CYCLE_1_2_ONLY);
+        assert_eq!(cycle_error(6, &relations), cycle_1_2_only());
     }
 
     #[test]
@@ -499,10 +527,10 @@ mod tests {
         let relations = [rel(1, 2), rel(2, 1), rel(3, 4), rel(4, 5), rel(5, 3)];
         assert_eq!(
             cycle_error(5, &relations),
-            "cycle detected in dependency graph, involves issues: \
-             BMO-1 → BMO-2 → BMO-1; BMO-3 → BMO-4 → BMO-5 → BMO-3\n\
-             hint: `A → B` means A blocks B. Run `bmo link list BMO-1` to find the relation id \
-             of a link on the cycle, then `bmo link remove <relation id>` to break it."
+            cycle_error_naming(
+                "BMO-1 → BMO-2 → BMO-1; BMO-3 → BMO-4 → BMO-5 → BMO-3",
+                "BMO-1"
+            )
         );
     }
 
@@ -567,21 +595,27 @@ mod tests {
     }
 
     #[test]
-    fn cycle_error_marks_cycles_sharing_an_issue_as_overlapping() {
-        // 1 ⇄ 2 and 2 ⇄ 3 share issue 2; 4 is downstream.
+    fn cycle_error_lists_the_edges_of_cycles_sharing_an_issue() {
+        // 1 ⇄ 2 and 2 ⇄ 3 share issue 2; 4 is downstream, so 3 → 4 is omitted.
         let relations = [rel(1, 2), rel(2, 1), rel(2, 3), rel(3, 2), rel(3, 4)];
         assert_eq!(
             cycle_error(4, &relations),
-            cycle_error_naming("BMO-1, BMO-2, BMO-3 (overlapping cycles)", "BMO-1")
+            cycle_error_naming(
+                "BMO-1 → BMO-2, BMO-2 → BMO-1, BMO-2 → BMO-3, BMO-3 → BMO-2 (overlapping cycles)",
+                "BMO-1"
+            )
         );
     }
 
     #[test]
-    fn cycle_error_marks_a_self_loop_inside_a_larger_cycle_as_overlapping() {
+    fn cycle_error_lists_a_self_loop_inside_a_larger_cycle_as_an_edge() {
         let relations = [rel(1, 2), rel(2, 1), rel(2, 2)];
         assert_eq!(
             cycle_error(2, &relations),
-            cycle_error_naming("BMO-1, BMO-2 (overlapping cycles)", "BMO-1")
+            cycle_error_naming(
+                "BMO-1 → BMO-2, BMO-2 → BMO-1, BMO-2 → BMO-2 (overlapping cycles)",
+                "BMO-1"
+            )
         );
     }
 
@@ -600,7 +634,8 @@ mod tests {
         assert_eq!(
             cycle_error(6, &relations),
             cycle_error_naming(
-                "BMO-2, BMO-3, BMO-4 (overlapping cycles); BMO-5 → BMO-6 → BMO-5",
+                "BMO-2 → BMO-3, BMO-3 → BMO-2, BMO-3 → BMO-4, BMO-4 → BMO-3 \
+                 (overlapping cycles); BMO-5 → BMO-6 → BMO-5",
                 "BMO-2"
             )
         );
@@ -715,7 +750,8 @@ mod tests {
         assert_eq!(
             first,
             cycle_error_naming(
-                "BMO-1, BMO-2, BMO-3 (overlapping cycles); \
+                "BMO-1 → BMO-2, BMO-2 → BMO-1, BMO-2 → BMO-3, BMO-3 → BMO-2 \
+                 (overlapping cycles); \
                  BMO-4 → BMO-8 → BMO-12 → BMO-16 → BMO-4; BMO-22 → BMO-22",
                 "BMO-1"
             )

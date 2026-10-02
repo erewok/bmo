@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use clap::Args;
 
 use crate::cli::parse_id;
@@ -69,13 +71,14 @@ impl BlockingRole {
 /// An issue with a directional relation to itself plays both roles.
 fn other_ids_with_role(relations: &[Relation], issue_id: i64, role: BlockingRole) -> Vec<i64> {
     let mut other_ids = Vec::new();
+    let mut seen_ids = HashSet::new();
     for relation in relations {
         let view = relation.viewed_from(issue_id);
         let Some(role_of_view) = BlockingRole::of_kind(view.kind) else {
             continue;
         };
         let is_self_relation = relation.from_id == relation.to_id;
-        if (is_self_relation || role_of_view == role) && !other_ids.contains(&view.other_id) {
+        if (is_self_relation || role_of_view == role) && seen_ids.insert(view.other_id) {
             other_ids.push(view.other_id);
         }
     }
