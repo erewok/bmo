@@ -1,8 +1,10 @@
-use assert_cmd::cargo;
 use assert_cmd::prelude::*;
 use rusqlite::Connection;
 use std::process::Command;
 use tempfile::TempDir;
+
+mod common;
+use common::bmo_command;
 
 const BLOCKED_BY_HEADING: &str = "  ← blocked by:";
 const BLOCKS_HEADING: &str = "  → blocks:";
@@ -14,8 +16,8 @@ fn setup() -> TempDir {
 }
 
 fn bmo(dir: &TempDir) -> Command {
-    let mut cmd = Command::new(cargo::cargo_bin!("bmo"));
-    cmd.current_dir(dir.path()).env_remove("BMO_DB");
+    let mut cmd = bmo_command();
+    cmd.current_dir(dir.path());
     cmd
 }
 

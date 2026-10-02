@@ -16,7 +16,6 @@
 // The downstream tests (2–4) need a cyclic graph that bypassed the insertion
 // guard, so they inject the cycle directly into the SQLite DB.
 
-use assert_cmd::cargo;
 use assert_cmd::prelude::*;
 use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
@@ -24,11 +23,14 @@ use rusqlite::Connection;
 use std::process::Command;
 use tempfile::TempDir;
 
+mod common;
+use common::bmo_command;
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 fn setup() -> TempDir {
     let dir = TempDir::new().unwrap();
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .current_dir(dir.path())
         .arg("init")
         .assert()
@@ -37,7 +39,7 @@ fn setup() -> TempDir {
 }
 
 fn bmo(dir: &TempDir) -> Command {
-    let mut cmd = Command::new(cargo::cargo_bin!("bmo"));
+    let mut cmd = bmo_command();
     cmd.current_dir(dir.path());
     cmd
 }

@@ -1,13 +1,15 @@
-use assert_cmd::cargo;
 use assert_cmd::prelude::*;
 use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 use std::process::Command;
 use tempfile::TempDir;
 
+mod common;
+use common::bmo_command;
+
 fn setup() -> TempDir {
     let dir = TempDir::new().unwrap();
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .current_dir(dir.path())
         .arg("init")
         .assert()
@@ -16,7 +18,7 @@ fn setup() -> TempDir {
 }
 
 fn bmo(dir: &TempDir) -> Command {
-    let mut cmd = Command::new(cargo::cargo_bin!("bmo"));
+    let mut cmd = bmo_command();
     cmd.current_dir(dir.path());
     cmd
 }
@@ -26,7 +28,7 @@ fn bmo(dir: &TempDir) -> Command {
 #[test]
 fn version_prints_version() {
     let version = env!("CARGO_PKG_VERSION");
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .arg("version")
         .assert()
         .success()
@@ -38,9 +40,8 @@ fn version_flags_print_the_same_line_as_the_version_subcommand() {
     let dir = TempDir::new().unwrap();
     let expected = format!("bmo {}\n", env!("CARGO_PKG_VERSION"));
     for invocation in ["version", "--version", "-V"] {
-        Command::new(cargo::cargo_bin!("bmo"))
+        bmo_command()
             .current_dir(dir.path())
-            .env_remove("BMO_DB")
             .arg(invocation)
             .assert()
             .success()
@@ -51,10 +52,7 @@ fn version_flags_print_the_same_line_as_the_version_subcommand() {
 #[test]
 fn version_subcommand_json_emits_envelope() {
     let version = env!("CARGO_PKG_VERSION");
-    let output = Command::new(cargo::cargo_bin!("bmo"))
-        .args(["version", "--json"])
-        .output()
-        .unwrap();
+    let output = bmo_command().args(["version", "--json"]).output().unwrap();
     assert!(output.status.success());
     let envelope: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(
@@ -68,9 +66,8 @@ fn version_flag_prints_plain_text_even_with_json_flag() {
     let dir = TempDir::new().unwrap();
     let expected = format!("bmo {}\n", env!("CARGO_PKG_VERSION"));
     for invocation in [["--json", "--version"], ["--version", "--json"]] {
-        Command::new(cargo::cargo_bin!("bmo"))
+        bmo_command()
             .current_dir(dir.path())
-            .env_remove("BMO_DB")
             .args(invocation)
             .assert()
             .success()
@@ -102,9 +99,8 @@ fn version_flag_before_a_subcommand_prints_version_without_running_it() {
 #[test]
 fn lowercase_v_is_not_a_version_flag() {
     let dir = TempDir::new().unwrap();
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .current_dir(dir.path())
-        .env_remove("BMO_DB")
         .arg("-v")
         .assert()
         .code(2)
@@ -130,7 +126,7 @@ fn version_flag_after_a_subcommand_is_rejected() {
 #[test]
 fn init_creates_bmo_dir() {
     let dir = TempDir::new().unwrap();
-    Command::new(cargo::cargo_bin!("bmo"))
+    bmo_command()
         .current_dir(dir.path())
         .arg("init")
         .assert()
@@ -595,8 +591,7 @@ fn truncate_confirmation_prompt_aborts_on_no() {
         .success();
 
     // Send "n" to the confirmation prompt via assert_cmd::Command which supports write_stdin
-    assert_cmd::Command::cargo_bin("bmo")
-        .unwrap()
+    assert_cmd::Command::from_std(bmo_command())
         .current_dir(dir.path())
         .args(["truncate"])
         .write_stdin("n\n")
