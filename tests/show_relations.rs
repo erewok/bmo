@@ -54,6 +54,17 @@ fn shown_relation_lines(dir: &TempDir, issue: &str) -> Vec<String> {
         .collect()
 }
 
+/// Writes a relation of an issue to itself, which `link add` rejects.
+fn inject_self_relation(dir: &TempDir, issue_id: i64, kind: &str) {
+    rusqlite::Connection::open(dir.path().join(".bmo/issues.db"))
+        .unwrap()
+        .execute(
+            "INSERT INTO issue_relations (from_id, to_id, relation) VALUES (?1, ?1, ?2)",
+            rusqlite::params![issue_id, kind],
+        )
+        .unwrap();
+}
+
 /// The header and body rows of the table printed by `bmo issue link list <issue>`.
 fn link_list_table_rows(dir: &TempDir, issue: &str) -> Vec<Vec<String>> {
     stdout_of(dir, &["issue", "link", "list", issue])
@@ -132,7 +143,7 @@ fn show_renders_each_relation_from_the_shown_issue() {
 }
 
 #[test]
-fn show_json_returns_relations_as_stored() {
+fn show_json_returns_relations_as_stored_with_their_view_from_the_shown_issue() {
     let dir = setup_with_issues(&["first", "second", "third"]);
     link(&dir, "BMO-1", "blocks", "BMO-2");
     link(&dir, "BMO-3", "blocked-by", "BMO-2");
@@ -143,8 +154,14 @@ fn show_json_returns_relations_as_stored() {
     assert_eq!(
         json["data"]["relations"],
         serde_json::json!([
-            {"id": 1, "from_id": 1, "to_id": 2, "kind": "blocks"},
-            {"id": 2, "from_id": 3, "to_id": 2, "kind": "blocked-by"},
+            {
+                "id": 1, "from_id": 1, "to_id": 2, "kind": "blocks",
+                "view": {"kind": "blocked-by", "other_id": 1, "self_link": false}
+            },
+            {
+                "id": 2, "from_id": 3, "to_id": 2, "kind": "blocked-by",
+                "view": {"kind": "blocks", "other_id": 3, "self_link": false}
+            },
         ])
     );
 }
@@ -187,5 +204,20 @@ fn link_list_json_returns_relations_as_stored() {
     assert_eq!(
         json["data"],
         serde_json::json!([{"id": 1, "from_id": 1, "to_id": 2, "kind": "blocks"}])
+    );
+}
+
+#[test]
+fn show_flags_a_self_relation_and_names_the_command_to_remove_it() {
+    let dir = setup_with_issues(&["first", "second"]);
+    link(&dir, "BMO-1", "blocks", "BMO-2");
+    inject_self_relation(&dir, 1, "depends-on");
+
+    assert_eq!(
+        shown_relation_lines(&dir, "BMO-1"),
+        [
+            "→ blocks BMO-2",
+            "→ depends on BMO-1 (invalid self-link; remove with `bmo link remove 2`)",
+        ]
     );
 }

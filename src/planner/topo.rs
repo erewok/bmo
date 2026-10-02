@@ -54,7 +54,7 @@ pub fn topological_levels(dag: &Dag) -> anyhow::Result<Vec<Vec<i64>>> {
 
     if processed < dag.nodes.len() {
         let cycles = cycle_groups(dag);
-        let Some(first_cycle) = cycles.first() else {
+        if cycles.is_empty() {
             // Only reachable when `forward` and `reverse` disagree, which
             // `Dag::build` never produces but the public fields allow.
             anyhow::bail!(
@@ -62,24 +62,24 @@ pub fn topological_levels(dag: &Dag) -> anyhow::Result<Vec<Vec<i64>>> {
                  issues left unplanned: {}",
                 display_ids(dag, &still_blocked_ids(&in_degree), ", ")
             );
-        };
+        }
         anyhow::bail!(
-            "cycle detected in dependency graph, involves issues: {}\n\
-             hint: `A → B` means A blocks B. Pick an edge on a cycle and run `bmo link list {}` \
-             to find its relation ids, then `bmo link remove <relation id>` for every relation \
-             that creates that edge (an edge can be stored more than once, e.g. as both \
-             `A blocks B` and `B depends-on A`). Repeat until no cycle remains.",
+            "cycle detected in dependency graph, involves issues: {}\n{CYCLE_HINT}",
             cycles
                 .iter()
                 .map(|cycle| cycle.display(dag))
                 .collect::<Vec<_>>()
-                .join("; "),
-            dag.nodes[&first_cycle.lowest_id()].issue.display_id()
+                .join("; ")
         );
     }
 
     Ok(levels)
 }
+
+const CYCLE_HINT: &str = "hint: `A → B` means A blocks B. Pick an edge `A → B` on a cycle and \
+     run `bmo link list A` to find the relations that create it, then \
+     `bmo link remove <relation id>` for each one (an edge can be stored more than once, e.g. as \
+     both `A blocks B` and `B depends-on A`). Repeat until no cycle remains.";
 
 fn display_ids(dag: &Dag, ids: &[i64], separator: &str) -> String {
     ids.iter()
@@ -474,21 +474,21 @@ mod tests {
         assert_eq!(levels[2], vec![3]);
     }
 
-    fn cycle_error_naming(groups: &str, first_issue: &str) -> String {
+    fn cycle_error_naming(groups: &str) -> String {
         format!(
             "cycle detected in dependency graph, involves issues: {groups}\n\
-             hint: `A → B` means A blocks B. Pick an edge on a cycle and run \
-             `bmo link list {first_issue}` to find its relation ids, then \
-             `bmo link remove <relation id>` for every relation that creates that edge \
-             (an edge can be stored more than once, e.g. as both `A blocks B` and \
-             `B depends-on A`). Repeat until no cycle remains."
+             hint: `A → B` means A blocks B. Pick an edge `A → B` on a cycle and run \
+             `bmo link list A` to find the relations that create it, then \
+             `bmo link remove <relation id>` for each one (an edge can be stored more than \
+             once, e.g. as both `A blocks B` and `B depends-on A`). Repeat until no cycle \
+             remains."
         )
     }
 
     // 1 ⇄ 2 is the only cycle. 3 and 4 are merely downstream of it, 5 is
     // unrelated and 6 is upstream; none of those four lie on a cycle.
     fn cycle_1_2_only() -> String {
-        cycle_error_naming("BMO-1 → BMO-2 → BMO-1", "BMO-1")
+        cycle_error_naming("BMO-1 → BMO-2 → BMO-1")
     }
 
     #[test]
@@ -527,10 +527,7 @@ mod tests {
         let relations = [rel(1, 2), rel(2, 1), rel(3, 4), rel(4, 5), rel(5, 3)];
         assert_eq!(
             cycle_error(5, &relations),
-            cycle_error_naming(
-                "BMO-1 → BMO-2 → BMO-1; BMO-3 → BMO-4 → BMO-5 → BMO-3",
-                "BMO-1"
-            )
+            cycle_error_naming("BMO-1 → BMO-2 → BMO-1; BMO-3 → BMO-4 → BMO-5 → BMO-3")
         );
     }
 
@@ -540,10 +537,7 @@ mod tests {
         let relations = [rel(9, 4), rel(4, 9), rel(3, 3), rel(6, 2), rel(2, 6)];
         assert_eq!(
             cycle_error(9, &relations),
-            cycle_error_naming(
-                "BMO-2 → BMO-6 → BMO-2; BMO-3 → BMO-3; BMO-4 → BMO-9 → BMO-4",
-                "BMO-2"
-            )
+            cycle_error_naming("BMO-2 → BMO-6 → BMO-2; BMO-3 → BMO-3; BMO-4 → BMO-9 → BMO-4")
         );
     }
 
@@ -561,7 +555,7 @@ mod tests {
         ];
         assert_eq!(
             cycle_error(5, &relations),
-            cycle_error_naming("BMO-1 → BMO-2 → BMO-1; BMO-4 → BMO-5 → BMO-4", "BMO-1")
+            cycle_error_naming("BMO-1 → BMO-2 → BMO-1; BMO-4 → BMO-5 → BMO-4")
         );
     }
 
@@ -571,7 +565,7 @@ mod tests {
         let relations = [rel(7, 3), rel(3, 5), rel(5, 7), rel(5, 9)];
         assert_eq!(
             cycle_error(9, &relations),
-            cycle_error_naming("BMO-3 → BMO-5 → BMO-7 → BMO-3", "BMO-3")
+            cycle_error_naming("BMO-3 → BMO-5 → BMO-7 → BMO-3")
         );
     }
 
@@ -581,7 +575,7 @@ mod tests {
         let relations = [rel(1, 3), rel(3, 2), rel(2, 1)];
         assert_eq!(
             cycle_error(3, &relations),
-            cycle_error_naming("BMO-1 → BMO-3 → BMO-2 → BMO-1", "BMO-1")
+            cycle_error_naming("BMO-1 → BMO-3 → BMO-2 → BMO-1")
         );
     }
 
@@ -590,7 +584,7 @@ mod tests {
         let relations = [rel(1, 1), rel(1, 2)];
         assert_eq!(
             cycle_error(2, &relations),
-            cycle_error_naming("BMO-1 → BMO-1", "BMO-1")
+            cycle_error_naming("BMO-1 → BMO-1")
         );
     }
 
@@ -601,8 +595,7 @@ mod tests {
         assert_eq!(
             cycle_error(4, &relations),
             cycle_error_naming(
-                "BMO-1 → BMO-2, BMO-2 → BMO-1, BMO-2 → BMO-3, BMO-3 → BMO-2 (overlapping cycles)",
-                "BMO-1"
+                "BMO-1 → BMO-2, BMO-2 → BMO-1, BMO-2 → BMO-3, BMO-3 → BMO-2 (overlapping cycles)"
             )
         );
     }
@@ -612,10 +605,7 @@ mod tests {
         let relations = [rel(1, 2), rel(2, 1), rel(2, 2)];
         assert_eq!(
             cycle_error(2, &relations),
-            cycle_error_naming(
-                "BMO-1 → BMO-2, BMO-2 → BMO-1, BMO-2 → BMO-2 (overlapping cycles)",
-                "BMO-1"
-            )
+            cycle_error_naming("BMO-1 → BMO-2, BMO-2 → BMO-1, BMO-2 → BMO-2 (overlapping cycles)")
         );
     }
 
@@ -635,21 +625,21 @@ mod tests {
             cycle_error(6, &relations),
             cycle_error_naming(
                 "BMO-2 → BMO-3, BMO-3 → BMO-2, BMO-3 → BMO-4, BMO-4 → BMO-3 \
-                 (overlapping cycles); BMO-5 → BMO-6 → BMO-5",
-                "BMO-2"
+                 (overlapping cycles); BMO-5 → BMO-6 → BMO-5"
             )
         );
     }
 
     #[test]
     fn cycle_error_hint_names_both_remediation_commands() {
-        // The cycle is 3 ⇄ 4; 1 and 2 are upstream and must not be suggested.
+        // The cycle is 3 ⇄ 4; 1 and 2 are upstream and must not be named.
         let relations = [rel(1, 2), rel(2, 3), rel(3, 4), rel(4, 3)];
         let message = cycle_error(4, &relations);
         let hint = message.lines().nth(1).expect("hint line missing");
 
         assert!(hint.starts_with("hint: "), "{hint}");
-        assert!(hint.contains("`bmo link list BMO-3`"), "{hint}");
+        assert!(hint.contains("`bmo link list A`"), "{hint}");
+        assert!(!hint.contains("BMO-"), "{hint}");
         assert!(hint.contains("`bmo link remove <relation id>`"), "{hint}");
         assert_eq!(message.lines().count(), 2);
     }
@@ -694,7 +684,7 @@ mod tests {
 
         assert_eq!(
             topological_levels(&dag).unwrap_err().to_string(),
-            cycle_error_naming("BMO-1 → BMO-2 → BMO-1", "BMO-1")
+            cycle_error_naming("BMO-1 → BMO-2 → BMO-1")
         );
     }
 
@@ -707,7 +697,7 @@ mod tests {
 
         assert_eq!(
             topological_levels(&dag).unwrap_err().to_string(),
-            cycle_error_naming("BMO-1 → BMO-2 → BMO-1", "BMO-1")
+            cycle_error_naming("BMO-1 → BMO-2 → BMO-1")
         );
     }
 
@@ -752,8 +742,7 @@ mod tests {
             cycle_error_naming(
                 "BMO-1 → BMO-2, BMO-2 → BMO-1, BMO-2 → BMO-3, BMO-3 → BMO-2 \
                  (overlapping cycles); \
-                 BMO-4 → BMO-8 → BMO-12 → BMO-16 → BMO-4; BMO-22 → BMO-22",
-                "BMO-1"
+                 BMO-4 → BMO-8 → BMO-12 → BMO-16 → BMO-4; BMO-22 → BMO-22"
             )
         );
         for _ in 0..50 {

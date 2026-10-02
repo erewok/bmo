@@ -375,3 +375,20 @@ async fn board_page_renders() {
         "expected text/html content-type, got: {content_type}"
     );
 }
+
+#[tokio::test]
+async fn issue_detail_page_flags_a_self_relation() {
+    let (app, dir, _shutdown) = setup_app();
+    let id = create_test_issue(&dir);
+    // `add_relation` rejects self-links, so write the row directly.
+    rusqlite::Connection::open(dir.path().join("issues.db"))
+        .unwrap()
+        .execute(
+            "INSERT INTO issue_relations (from_id, to_id, relation) VALUES (?1, ?1, 'blocks')",
+            rusqlite::params![id],
+        )
+        .unwrap();
+
+    let list = relation_list_html(app, id).await;
+    assert!(list.contains("(invalid self-link)"), "`{list}`");
+}

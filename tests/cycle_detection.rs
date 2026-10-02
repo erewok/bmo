@@ -279,6 +279,33 @@ fn link_add_rejects_dag_cycles() {
     }
 }
 
+#[test]
+fn link_add_rejects_a_self_link_of_every_kind() {
+    let dir = setup();
+    create_issues(&dir, 1);
+
+    for rel in [
+        "blocks",
+        "blocked-by",
+        "depends-on",
+        "dependency-of",
+        "relates-to",
+        "duplicates",
+        "duplicate-of",
+    ] {
+        bmo(&dir)
+            .args(["issue", "link", "add", "BMO-1", rel, "BMO-1"])
+            .assert()
+            .code(3) // ErrorCode::Validation
+            .stderr(contains("Cannot link an issue to itself"));
+    }
+    bmo(&dir)
+        .args(["issue", "link", "list", "BMO-1"])
+        .assert()
+        .success()
+        .stdout(contains("No relations."));
+}
+
 // These cases are allowed, but for two different reasons:
 //
 // - `blocked-by`/`dependency-of` ARE DAG edges (they mirror `blocks`/
@@ -437,10 +464,10 @@ fn cycle_error_names_only_cycle_members_not_downstream_issues() {
 
 const TWO_INDEPENDENT_CYCLES_ERROR: &str = "cycle detected in dependency graph, involves issues: \
      BMO-1 → BMO-2 → BMO-1; BMO-3 → BMO-4 → BMO-5 → BMO-3\n\
-     hint: `A → B` means A blocks B. Pick an edge on a cycle and run `bmo link list BMO-1` \
-     to find its relation ids, then `bmo link remove <relation id>` for every relation that \
-     creates that edge (an edge can be stored more than once, e.g. as both `A blocks B` and \
-     `B depends-on A`). Repeat until no cycle remains.";
+     hint: `A → B` means A blocks B. Pick an edge `A → B` on a cycle and run `bmo link list A` \
+     to find the relations that create it, then `bmo link remove <relation id>` for each one \
+     (an edge can be stored more than once, e.g. as both `A blocks B` and `B depends-on A`). \
+     Repeat until no cycle remains.";
 
 // Two cycles that share nothing must be reported as two groups, each in
 // blocking order, followed by the way out.

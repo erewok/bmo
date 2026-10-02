@@ -37,7 +37,7 @@ fn version_prints_version() {
 fn version_flags_print_the_same_line_as_the_version_subcommand() {
     let dir = TempDir::new().unwrap();
     let expected = format!("bmo {}\n", env!("CARGO_PKG_VERSION"));
-    for invocation in ["version", "--version", "-V", "-v"] {
+    for invocation in ["version", "--version", "-V"] {
         Command::new(cargo::cargo_bin!("bmo"))
             .current_dir(dir.path())
             .env_remove("BMO_DB")
@@ -92,16 +92,30 @@ fn version_flag_before_a_subcommand_prints_version_without_running_it() {
         .stdout(contains("Listed issue"));
 
     bmo(&dir)
-        .args(["-v", "list"])
+        .args(["-V", "list"])
         .assert()
         .success()
         .stdout(format!("bmo {}\n", env!("CARGO_PKG_VERSION")));
 }
 
+// `-v` is conventionally `--verbose`, so it is not an alias for `--version`.
+#[test]
+fn lowercase_v_is_not_a_version_flag() {
+    let dir = TempDir::new().unwrap();
+    Command::new(cargo::cargo_bin!("bmo"))
+        .current_dir(dir.path())
+        .env_remove("BMO_DB")
+        .arg("-v")
+        .assert()
+        .code(2)
+        .stdout("")
+        .stderr(contains("unexpected argument"));
+}
+
 #[test]
 fn version_flag_after_a_subcommand_is_rejected() {
     let dir = setup();
-    for flag in ["-v", "-V", "--version"] {
+    for flag in ["-V", "--version"] {
         bmo(&dir)
             .args(["list", flag])
             .assert()

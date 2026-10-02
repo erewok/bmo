@@ -257,7 +257,7 @@ impl Printer for HumanPrinter {
         if !detail.relations.is_empty() {
             println!("\n  Relations:");
             for rel in &detail.relations {
-                let view = rel.viewed_from(issue.id);
+                let view = rel.view;
                 let other = view.other_id;
                 let direction = match view.kind {
                     RelationKind::Blocks => format!("→ blocks BMO-{other}"),
@@ -268,7 +268,14 @@ impl Printer for HumanPrinter {
                     RelationKind::Duplicates => format!("→ duplicates BMO-{other}"),
                     RelationKind::DuplicateOf => format!("← duplicate of BMO-{other}"),
                 };
-                println!("    {direction}");
+                if view.self_link {
+                    println!(
+                        "    {direction} (invalid self-link; remove with `bmo link remove {}`)",
+                        rel.relation.id
+                    );
+                } else {
+                    println!("    {direction}");
+                }
             }
         }
         if !detail.comments.is_empty() {

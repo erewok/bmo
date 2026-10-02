@@ -3,7 +3,7 @@ pub mod json;
 
 use crate::db::Stats;
 use crate::errors::ErrorCode;
-use crate::model::{Comment, Issue, Label, Relation};
+use crate::model::{Comment, Issue, IssueRelation, Label, Relation};
 
 // ── Data structs for board/plan output ───────────────────────────────────────
 
@@ -34,7 +34,7 @@ pub struct ExecutionPlan {
 pub struct IssueDetail {
     pub issue: Issue,
     pub sub_issues: Vec<Issue>,
-    pub relations: Vec<Relation>,
+    pub relations: Vec<IssueRelation>,
     pub comments: Vec<Comment>,
     pub labels: Vec<Label>,
 }

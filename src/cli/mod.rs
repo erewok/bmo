@@ -25,7 +25,7 @@ pub struct Cli {
     /// Print the bmo version
     // `Option<bool>` is clap's required destination type for `ArgAction::Version`;
     // the action prints the version and exits before this field is ever read.
-    #[arg(short = 'V', visible_short_alias = 'v', long, action = ArgAction::Version)]
+    #[arg(short = 'V', long, action = ArgAction::Version)]
     version: Option<bool>,
 
     /// Output results as JSON

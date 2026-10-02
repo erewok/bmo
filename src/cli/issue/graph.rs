@@ -4,7 +4,7 @@ use clap::Args;
 
 use crate::cli::parse_id;
 use crate::db::{Repository, find_db, open_db};
-use crate::model::{Relation, RelationKind};
+use crate::model::{IssueRelation, Relation, RelationKind};
 
 #[derive(Args)]
 pub struct GraphArgs {
@@ -25,6 +25,10 @@ pub fn run(args: &GraphArgs, json: bool, db: Option<String>) -> anyhow::Result<(
     let relations = repo.list_relations(issue_id)?;
 
     if json {
+        let relations: Vec<IssueRelation> = relations
+            .into_iter()
+            .map(|relation| relation.with_view_from(issue_id))
+            .collect();
         let envelope = serde_json::json!({
             "ok": true,
             "data": { "issue": issue, "relations": relations },
@@ -39,8 +43,8 @@ pub fn run(args: &GraphArgs, json: bool, db: Option<String>) -> anyhow::Result<(
     let blockers = other_ids_with_role(&relations, issue_id, BlockingRole::BlockedByOther);
     let blocking = other_ids_with_role(&relations, issue_id, BlockingRole::BlocksOther);
 
-    print_group(&repo, "← blocked by:", &blockers);
-    print_group(&repo, "→ blocks:", &blocking);
+    print_group(&repo, issue_id, "← blocked by:", &blockers);
+    print_group(&repo, issue_id, "→ blocks:", &blocking);
 
     if blockers.is_empty() && blocking.is_empty() {
         println!("  (no blocking relations)");
@@ -77,22 +81,27 @@ fn other_ids_with_role(relations: &[Relation], issue_id: i64, role: BlockingRole
         let Some(role_of_view) = BlockingRole::of_kind(view.kind) else {
             continue;
         };
-        let is_self_relation = relation.from_id == relation.to_id;
-        if (is_self_relation || role_of_view == role) && seen_ids.insert(view.other_id) {
+        if (view.self_link || role_of_view == role) && seen_ids.insert(view.other_id) {
             other_ids.push(view.other_id);
         }
     }
     other_ids
 }
 
-fn print_group(repo: &impl Repository, heading: &str, other_ids: &[i64]) {
+/// Prints `other_ids` under `heading`, marking `issue_id` itself as an invalid self-link.
+fn print_group(repo: &impl Repository, issue_id: i64, heading: &str, other_ids: &[i64]) {
     if other_ids.is_empty() {
         return;
     }
     println!("  {heading}");
     for &other_id in other_ids {
         if let Ok(Some(other)) = repo.get_issue(other_id) {
-            println!("      BMO-{} — {}", other_id, other.title);
+            let flag = if other_id == issue_id {
+                " (invalid self-link)"
+            } else {
+                ""
+            };
+            println!("      BMO-{} — {}{flag}", other_id, other.title);
         }
     }
 }

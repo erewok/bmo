@@ -199,7 +199,7 @@ fn blockers_and_blocked_issues_are_listed_in_separate_groups() {
 }
 
 #[test]
-fn directional_self_relation_lists_the_issue_in_both_groups() {
+fn directional_self_relation_lists_the_issue_in_both_groups_flagged_invalid() {
     for kind in ["blocks", "blocked-by", "depends-on", "dependency-of"] {
         let dir = setup_with_issues(&["First"]);
         inject_self_relation(&dir, 1, kind);
@@ -209,9 +209,9 @@ fn directional_self_relation_lists_the_issue_in_both_groups() {
             [
                 "BMO-1 — First",
                 BLOCKED_BY_HEADING,
-                "      BMO-1 — First",
+                "      BMO-1 — First (invalid self-link)",
                 BLOCKS_HEADING,
-                "      BMO-1 — First",
+                "      BMO-1 — First (invalid self-link)",
             ],
             "self-relation of kind {kind}"
         );
@@ -245,26 +245,50 @@ fn self_relation_is_listed_once_per_group_alongside_other_issues() {
             "BMO-1 — First",
             BLOCKED_BY_HEADING,
             "      BMO-2 — Second",
-            "      BMO-1 — First",
+            "      BMO-1 — First (invalid self-link)",
             BLOCKS_HEADING,
-            "      BMO-1 — First",
+            "      BMO-1 — First (invalid self-link)",
         ]
     );
     assert_eq!(graph_lines(&dir, "BMO-2"), second_blocks_first());
 }
 
 #[test]
-fn json_returns_the_stored_depends_on_row_from_either_endpoint() {
+fn json_returns_the_stored_row_with_its_view_from_either_endpoint() {
     let dir = setup_with_issues(&["First", "Second"]);
     link(&dir, "BMO-1", "depends-on", "BMO-2");
-    let stored_rows = serde_json::json!([
-        {"id": 1, "from_id": 1, "to_id": 2, "kind": "depends-on"}
-    ]);
 
-    for (issue, id) in [("BMO-1", 1), ("BMO-2", 2)] {
+    for (issue, id, view) in [
+        (
+            "BMO-1",
+            1,
+            serde_json::json!({"kind": "depends-on", "other_id": 2, "self_link": false}),
+        ),
+        (
+            "BMO-2",
+            2,
+            serde_json::json!({"kind": "dependency-of", "other_id": 1, "self_link": false}),
+        ),
+    ] {
         let envelope = graph_json(&dir, issue);
         assert_eq!(envelope["ok"], true);
         assert_eq!(envelope["data"]["issue"]["id"], id);
-        assert_eq!(envelope["data"]["relations"], stored_rows);
+        assert_eq!(
+            envelope["data"]["relations"],
+            serde_json::json!([
+                {"id": 1, "from_id": 1, "to_id": 2, "kind": "depends-on", "view": view}
+            ])
+        );
     }
+}
+
+#[test]
+fn json_flags_a_self_relation() {
+    let dir = setup_with_issues(&["First"]);
+    inject_self_relation(&dir, 1, "blocks");
+
+    assert_eq!(
+        graph_json(&dir, "BMO-1")["data"]["relations"][0]["view"],
+        serde_json::json!({"kind": "blocks", "other_id": 1, "self_link": true})
+    );
 }

@@ -37,6 +37,7 @@
         {% elif r.kind == "duplicate-of" %}← duplicate of <a href="/issues/{{ r.other_id }}">BMO-{{ r.other_id }}</a>
         {% else %}{{ r.kind }} <a href="/issues/{{ r.other_id }}">BMO-{{ r.other_id }}</a>
         {% endif %}
+        {% if r.self_link %}(invalid self-link){% endif %}
       </li>
       {% endfor %}
     </ul>

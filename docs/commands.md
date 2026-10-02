@@ -124,11 +124,12 @@ Print the bmo version string.
 
 No flags beyond globals.
 
-The top-level flags `bmo --version`, `bmo -V`, and `bmo -v` print the same line as `bmo version`
+The top-level flags `bmo --version` and `bmo -V` print the same line as `bmo version`
 (`bmo <version>`) and exit 0. They need no subcommand and no bmo database, and always print the
 plain-text line; use `bmo version --json` for JSON output. They are accepted only before a
-subcommand: `bmo -v list` prints the version without running `list`, while `bmo list -v` is rejected
-as an unexpected argument (exit code 2).
+subcommand: `bmo -V list` prints the version without running `list`, while `bmo list -V` is rejected
+as an unexpected argument (exit code 2). There is no `-v` version flag; `bmo -v` is rejected with
+exit code 2.
 
 **Example:**
 
@@ -136,7 +137,6 @@ as an unexpected argument (exit code 2).
 bmo version
 bmo --version
 bmo -V
-bmo -v
 ```
 
 **JSON output** (`data` field):
@@ -471,6 +471,19 @@ bmo show 5 --json
 }
 ```
 
+Each relation is the stored row plus a `view` object that reads it from the requested issue:
+
+```json
+{
+  "id": 1, "from_id": 1, "to_id": 2, "kind": "blocks",
+  "view": { "kind": "blocked-by", "other_id": 1, "self_link": false }
+}
+```
+
+`view.kind` is the requested issue's relation to `view.other_id`. `view.self_link` is `true` for a
+relation of an issue to itself; `link add` rejects these, so one only appears in a database written
+by an older bmo or by direct SQL, and should be removed with `bmo link remove <id>`.
+
 ### bmo issue edit
 
 Edit one or more fields on an existing issue. Only the fields you supply are updated.
@@ -660,6 +673,8 @@ bmo graph 1 --json
 }
 ```
 
+Each relation has the same shape as in `bmo show --json`, including `view`.
+
 ### bmo issue comment add
 
 Add a comment to an issue.
@@ -788,6 +803,9 @@ Add a directional relationship between two issues.
 | `<from-id>` | positional (required) | Source issue ID |
 | `<relation>` | positional (required) | Relation kind (see enumerated values above) |
 | `<to-id>` | positional (required) | Target issue ID |
+
+Rejected with exit code 3 when `<from-id>` and `<to-id>` are the same issue, for every relation
+kind, or when a directional relation would create a dependency cycle.
 
 **Examples:**
 
