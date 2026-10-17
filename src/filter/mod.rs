@@ -1,4 +1,6 @@
-use crate::model::{IssueFilter, Kind, Priority, Status};
+use std::str::FromStr;
+
+use crate::model::{IssueFilter, IssueFilterOrder, Kind, Priority, Status};
 
 /// Build an IssueFilter from CLI string arguments.
 #[derive(Debug, Default)]
@@ -10,6 +12,7 @@ pub struct FilterBuilder {
     pub labels: Vec<String>,
     pub parent_id: Option<String>,
     pub search: Option<String>,
+    pub sort: Option<String>,
     pub limit: usize,
     pub offset: usize,
     /// When `true`, removes the default `status != 'done'` exclusion.
@@ -32,6 +35,10 @@ impl FilterBuilder {
                     .collect::<anyhow::Result<Vec<_>>>()?,
             )
         };
+        let order_by = self
+            .sort
+            .and_then(|s| IssueFilterOrder::from_str(&s).ok())
+            .unwrap_or_default();
 
         let priority = if self.priorities.is_empty() {
             None
@@ -73,6 +80,7 @@ impl FilterBuilder {
             kind,
             assignee: self.assignee,
             labels,
+            order_by,
             parent_id,
             search: self.search,
             limit: if self.limit == 0 {
@@ -85,7 +93,6 @@ impl FilterBuilder {
             } else {
                 Some(self.offset)
             },
-            order_by: None,
             include_done: self.include_done,
             findall: self.findall,
         })

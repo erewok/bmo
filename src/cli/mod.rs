@@ -81,12 +81,14 @@ pub enum Commands {
     /// Edit an issue
     Edit(issue::edit::EditArgs),
     /// Change an issue's status
+    #[command(alias = "mv")]
     Move(issue::move_cmd::MoveArgs),
     /// Mark an issue as done
     Close(issue::close::CloseArgs),
     /// Reopen a closed issue
     Reopen(issue::reopen::ReopenArgs),
     /// Delete an issue
+    #[command(alias = "rm")]
     Delete(issue::delete::DeleteArgs),
     /// Show issue activity log
     Log(issue::log_cmd::LogArgs),
