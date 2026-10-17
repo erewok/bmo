@@ -1,6 +1,9 @@
 use chrono::{DateTime, Utc};
 use clap::ValueEnum;
-use sea_query::{Cond, Expr, ExprTrait, Order, Query, SelectStatement, enum_def};
+use sea_query::{
+    Alias, CaseStatement, ColumnRef, Cond, Expr, ExprTrait, IntoColumnRef, Order, Query,
+    SelectStatement, enum_def,
+};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
@@ -152,6 +155,15 @@ impl Priority {
             Priority::None => "none",
         }
     }
+
+    pub fn to_priority_sort_expr() -> CaseStatement {
+        CaseStatement::new()
+            .case(Expr::col("priority").eq("critical"), Expr::val("p1"))
+            .case(Expr::col("priority").eq("high"), Expr::val("p2"))
+            .case(Expr::col("priority").eq("medium"), Expr::val("p3"))
+            .case(Expr::col("priority").eq("low"), Expr::val("p4"))
+            .finally(Expr::val("p5"))
+    }
 }
 
 impl fmt::Display for Priority {
@@ -262,25 +274,30 @@ impl FromStr for IssueFilterOrder {
     }
 }
 impl IssueFilterOrder {
-    pub fn to_ordering(&self) -> Vec<(IssueIden, Order)> {
+    pub fn to_ordering(&self) -> Vec<(ColumnRef, Order)> {
         match self {
-            IssueFilterOrder::Default => vec![
-                (IssueIden::Priority, Order::Desc),
-                (IssueIden::Id, Order::Asc),
+            IssueFilterOrder::Default | IssueFilterOrder::SrtPriority => vec![
+                ("priority_sort".into_column_ref(), Order::Asc),
+                (IssueIden::Id.into_column_ref(), Order::Asc),
             ],
-            IssueFilterOrder::SrtIdDesc => vec![(IssueIden::Id, Order::Desc)],
+            IssueFilterOrder::SrtIdDesc => vec![(IssueIden::Id.into_column_ref(), Order::Desc)],
             IssueFilterOrder::SrtStatus => {
-                vec![(IssueIden::Status, Order::Asc), (IssueIden::Id, Order::Asc)]
+                vec![
+                    (IssueIden::Status.into_column_ref(), Order::Asc),
+                    (IssueIden::Id.into_column_ref(), Order::Asc),
+                ]
             }
-            IssueFilterOrder::SrtPriority => vec![
-                (IssueIden::Priority, Order::Asc),
-                (IssueIden::Id, Order::Asc),
-            ],
             IssueFilterOrder::SrtLabel => {
-                vec![(IssueIden::Labels, Order::Asc), (IssueIden::Id, Order::Asc)]
+                vec![
+                    (IssueIden::Labels.into_column_ref(), Order::Asc),
+                    (IssueIden::Id.into_column_ref(), Order::Asc),
+                ]
             }
             IssueFilterOrder::SrtKind => {
-                vec![(IssueIden::Kind, Order::Asc), (IssueIden::Id, Order::Asc)]
+                vec![
+                    (IssueIden::Kind.into_column_ref(), Order::Asc),
+                    (IssueIden::Id.into_column_ref(), Order::Asc),
+                ]
             }
         }
     }
@@ -409,7 +426,13 @@ impl IssueFilter {
         }
 
         // ORDER BY / LIMIT / OFFSET always applied, including when findall = true.
-        // When `order_by` is explicitly set, use it instead of the default ordering.
+
+        // first we apply the priority sort case expr
+        query.expr_as(
+            Priority::to_priority_sort_expr(),
+            Alias::new("priority_sort"),
+        );
+
         for (col, dir) in self.order_by.to_ordering() {
             query = query.order_by(col, dir);
         }
