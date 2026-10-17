@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 
-use super::LabelIden;
+use super::label::LabelIden;
 
 /// A single tracked work item.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -235,6 +235,56 @@ impl FromStr for Kind {
 }
 
 // ── IssueFilter ───────────────────────────────────────────────────────────────
+/// Specifies the ordering of issues in a query result.
+#[derive(Debug, Default, Clone)]
+pub enum IssueFilterOrder {
+    #[default]
+    Default,
+    SrtIdDesc,
+    SrtKind,
+    SrtLabel,
+    SrtPriority,
+    SrtStatus,
+}
+
+impl FromStr for IssueFilterOrder {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "default" => Ok(IssueFilterOrder::Default),
+            "id" => Ok(IssueFilterOrder::SrtIdDesc),
+            "label" => Ok(IssueFilterOrder::SrtLabel),
+            "status" => Ok(IssueFilterOrder::SrtStatus),
+            "priority" => Ok(IssueFilterOrder::SrtPriority),
+            "kind" => Ok(IssueFilterOrder::SrtKind),
+            _ => anyhow::bail!("unknown order: {s}"),
+        }
+    }
+}
+impl IssueFilterOrder {
+    pub fn to_ordering(&self) -> Vec<(IssueIden, Order)> {
+        match self {
+            IssueFilterOrder::Default => vec![
+                (IssueIden::Priority, Order::Desc),
+                (IssueIden::Id, Order::Asc),
+            ],
+            IssueFilterOrder::SrtIdDesc => vec![(IssueIden::Id, Order::Desc)],
+            IssueFilterOrder::SrtStatus => {
+                vec![(IssueIden::Status, Order::Asc), (IssueIden::Id, Order::Asc)]
+            }
+            IssueFilterOrder::SrtPriority => vec![
+                (IssueIden::Priority, Order::Asc),
+                (IssueIden::Id, Order::Asc),
+            ],
+            IssueFilterOrder::SrtLabel => {
+                vec![(IssueIden::Labels, Order::Asc), (IssueIden::Id, Order::Asc)]
+            }
+            IssueFilterOrder::SrtKind => {
+                vec![(IssueIden::Kind, Order::Asc), (IssueIden::Id, Order::Asc)]
+            }
+        }
+    }
+}
 
 /// Parameters for filtering issue queries. All fields are optional; unset fields are ignored.
 #[derive(Debug, Default, Clone)]
@@ -250,7 +300,7 @@ pub struct IssueFilter {
     pub offset: Option<usize>,
     /// Custom ordering to apply instead of the default (priority DESC, id ASC).
     /// When `Some`, replaces the default ORDER BY entirely.
-    pub order_by: Option<Vec<(IssueIden, Order)>>,
+    pub order_by: IssueFilterOrder,
     // By default filters above do not include `done` status`
     pub include_done: bool,
     // short-circuit everything above and select all issues.
@@ -360,14 +410,8 @@ impl IssueFilter {
 
         // ORDER BY / LIMIT / OFFSET always applied, including when findall = true.
         // When `order_by` is explicitly set, use it instead of the default ordering.
-        if let Some(ref custom_order) = self.order_by {
-            for (col, dir) in custom_order {
-                query = query.order_by(*col, dir.clone());
-            }
-        } else {
-            query = query
-                .order_by(IssueIden::Priority, Order::Desc)
-                .order_by(IssueIden::Id, Order::Asc);
+        for (col, dir) in self.order_by.to_ordering() {
+            query = query.order_by(col, dir);
         }
         query.apply_if(self.limit, |q, v| {
             q.limit(v as u64);

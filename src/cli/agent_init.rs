@@ -4,11 +4,10 @@ use clap::Args;
 
 use crate::config::{Config, init_bmo_dir};
 use crate::db::{Repository, open_db};
-use crate::model::{IssueFilter, IssueIden, Kind, Status};
+use crate::model::{IssueFilter, IssueFilterOrder, Kind, Status};
 use crate::output::{BoardColumns, OutputMode, make_printer};
 use crate::planner::dag::{Dag, find_ready};
 use crate::planner::topo::topological_levels;
-use sea_query::Order;
 
 #[derive(Args)]
 pub struct AgentInitArgs {}
@@ -85,7 +84,7 @@ pub fn run(_args: &AgentInitArgs, json: bool, db: Option<String>) -> anyhow::Res
     let active_issues = repo.list_issues(IssueFilter::default())?;
     let done_issues = repo.list_issues(IssueFilter {
         status: Some(vec![Status::Done]),
-        order_by: Some(vec![(IssueIden::Id, Order::Desc)]),
+        order_by: IssueFilterOrder::SrtIdDesc,
         limit: Some(10),
         ..Default::default()
     })?;
@@ -95,7 +94,7 @@ pub fn run(_args: &AgentInitArgs, json: bool, db: Option<String>) -> anyhow::Res
         .list_issues(IssueFilter {
             include_done: true,
             kind: Some(vec![Kind::Epic]),
-            order_by: Some(vec![(IssueIden::Id, Order::Desc)]),
+            order_by: IssueFilterOrder::SrtIdDesc,
             limit: Some(1),
             ..Default::default()
         })?
@@ -232,7 +231,7 @@ fn run_with_dir_inner(bmo_dir: &std::path::Path, json: bool) -> anyhow::Result<(
     let active_issues = repo.list_issues(IssueFilter::default())?;
     let done_issues = repo.list_issues(IssueFilter {
         status: Some(vec![Status::Done]),
-        order_by: Some(vec![(IssueIden::Id, Order::Desc)]),
+        order_by: IssueFilterOrder::SrtIdDesc,
         limit: Some(10),
         ..Default::default()
     })?;
@@ -241,7 +240,7 @@ fn run_with_dir_inner(bmo_dir: &std::path::Path, json: bool) -> anyhow::Result<(
         .list_issues(IssueFilter {
             include_done: true,
             kind: Some(vec![Kind::Epic]),
-            order_by: Some(vec![(IssueIden::Id, Order::Desc)]),
+            order_by: IssueFilterOrder::SrtIdDesc,
             limit: Some(1),
             ..Default::default()
         })?

@@ -87,6 +87,7 @@ pub fn run(args: &ListArgs, json: bool, db: Option<String>) -> anyhow::Result<()
         labels: args.label.clone(),
         parent_id: args.parent.clone(),
         search: args.search.clone(),
+        sort: args.sort.clone(),
         limit: args.limit,
         offset: 0,
         findall: args.all,
