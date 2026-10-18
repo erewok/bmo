@@ -21,8 +21,8 @@ use rusqlite::Connection;
 
 use crate::model::activity::NewActivityEntry;
 use crate::model::{
-    ActivityEntry, Comment, FileConflict, Issue, IssueFile, IssueFilter, Kind, Label, Priority,
-    Relation, RelationKind, Status,
+    ActivityEntry, Comment, FileConflict, Issue, IssueFile, IssueFilter, IssueId, Kind, Label,
+    Priority, Relation, RelationKind, Status,
 };
 
 // ── Repository trait ──────────────────────────────────────────────────────────
@@ -38,7 +38,7 @@ pub trait Repository {
     fn create_issue(&self, input: &CreateIssueInput) -> anyhow::Result<Issue>;
 
     /// Fetch a single issue by `id`. Returns `None` if no such issue exists.
-    fn get_issue(&self, id: i64) -> anyhow::Result<Option<Issue>>;
+    fn get_issue(&self, id: IssueId) -> anyhow::Result<Option<Issue>>;
 
     /// Return all issues matching `filter`, in priority-descending, id-ascending order.
     fn list_issues(&self, filter: IssueFilter) -> anyhow::Result<Vec<Issue>>;
@@ -47,10 +47,10 @@ pub trait Repository {
     fn count_issues(&self, filter: IssueFilter) -> anyhow::Result<i64>;
 
     /// Apply `input` fields to the issue with `id` and return the updated issue.
-    fn update_issue(&self, id: i64, input: &UpdateIssueInput) -> anyhow::Result<Issue>;
+    fn update_issue(&self, id: IssueId, input: &UpdateIssueInput) -> anyhow::Result<Issue>;
 
     /// Permanently delete the issue with `id`.
-    fn delete_issue(&self, id: i64) -> anyhow::Result<()>;
+    fn delete_issue(&self, id: IssueId) -> anyhow::Result<()>;
 
     /// Delete all issues whose status is in `statuses` and return the count of deleted rows.
     /// Sub-issues referencing deleted issues have their `parent_id` set to `NULL` (`ON DELETE SET NULL`); they are not deleted.
@@ -63,7 +63,7 @@ pub trait Repository {
     fn truncate_all_issues(&self) -> anyhow::Result<u64>;
 
     /// Return all direct children of `parent_id`.
-    fn get_sub_issues(&self, parent_id: i64) -> anyhow::Result<Vec<Issue>>;
+    fn get_sub_issues(&self, parent_id: IssueId) -> anyhow::Result<Vec<Issue>>;
 
     // Comments
 
@@ -71,7 +71,7 @@ pub trait Repository {
     fn add_comment(&self, input: &AddCommentInput) -> anyhow::Result<Comment>;
 
     /// Return all comments for `issue_id` in ascending creation order.
-    fn list_comments(&self, issue_id: i64) -> anyhow::Result<Vec<Comment>>;
+    fn list_comments(&self, issue_id: IssueId) -> anyhow::Result<Vec<Comment>>;
 
     // Labels
 
@@ -79,13 +79,13 @@ pub trait Repository {
     fn get_or_create_label(&self, name: &str, color: Option<&str>) -> anyhow::Result<Label>;
 
     /// Attach label `label_id` to issue `issue_id`.
-    fn add_label_to_issue(&self, issue_id: i64, label_id: i64) -> anyhow::Result<()>;
+    fn add_label_to_issue(&self, issue_id: IssueId, label_id: i64) -> anyhow::Result<()>;
 
     /// Remove the label named `label_name` from issue `issue_id`.
-    fn remove_label_from_issue(&self, issue_id: i64, label_name: &str) -> anyhow::Result<()>;
+    fn remove_label_from_issue(&self, issue_id: IssueId, label_name: &str) -> anyhow::Result<()>;
 
     /// Return all labels attached to `issue_id`.
-    fn list_issue_labels(&self, issue_id: i64) -> anyhow::Result<Vec<Label>>;
+    fn list_issue_labels(&self, issue_id: IssueId) -> anyhow::Result<Vec<Label>>;
 
     /// Return every label defined in the repository.
     fn list_all_labels(&self) -> anyhow::Result<Vec<Label>>;
@@ -98,16 +98,16 @@ pub trait Repository {
     /// Create a directed relation of `kind` from `from_id` to `to_id`.
     fn add_relation(
         &self,
-        from_id: i64,
+        from_id: IssueId,
         kind: RelationKind,
-        to_id: i64,
+        to_id: IssueId,
     ) -> anyhow::Result<Relation>;
 
     /// Delete the relation with `relation_id`.
     fn remove_relation(&self, relation_id: i64) -> anyhow::Result<()>;
 
     /// Return all relations where `issue_id` appears as either endpoint.
-    fn list_relations(&self, issue_id: i64) -> anyhow::Result<Vec<Relation>>;
+    fn list_relations(&self, issue_id: IssueId) -> anyhow::Result<Vec<Relation>>;
 
     /// Return every relation in the repository.
     fn list_all_relations(&self) -> anyhow::Result<Vec<Relation>>;
@@ -118,22 +118,22 @@ pub trait Repository {
     fn log_activity(&self, entry: &NewActivityEntry) -> anyhow::Result<()>;
 
     /// Return up to `limit` activity entries for `issue_id`, newest first.
-    fn list_activity(&self, issue_id: i64, limit: usize) -> anyhow::Result<Vec<ActivityEntry>>;
+    fn list_activity(&self, issue_id: IssueId, limit: usize) -> anyhow::Result<Vec<ActivityEntry>>;
 
     // Files
 
     /// Attach a file path to an issue and return the stored record.
-    fn add_file(&self, issue_id: i64, path: &str) -> anyhow::Result<IssueFile>;
+    fn add_file(&self, issue_id: IssueId, path: &str) -> anyhow::Result<IssueFile>;
 
     /// Remove the file with `path` from `issue_id`.
-    fn remove_file(&self, issue_id: i64, path: &str) -> anyhow::Result<()>;
+    fn remove_file(&self, issue_id: IssueId, path: &str) -> anyhow::Result<()>;
 
     /// Return all files attached to `issue_id`.
-    fn list_files(&self, issue_id: i64) -> anyhow::Result<Vec<IssueFile>>;
+    fn list_files(&self, issue_id: IssueId) -> anyhow::Result<Vec<IssueFile>>;
 
     /// Return all files attached to `issue_id` that are also attached to at
     /// least one other in-progress issue, grouped by file path.
-    fn list_file_conflicts(&self, issue_id: i64) -> anyhow::Result<Vec<FileConflict>>;
+    fn list_file_conflicts(&self, issue_id: IssueId) -> anyhow::Result<Vec<FileConflict>>;
 
     /// Atomically claim an issue by setting its status to `in-progress` and
     /// optionally assigning it. Returns `BmoError::Conflict` if already in-progress,
@@ -175,7 +175,7 @@ pub trait Repository {
 /// Input for creating a new issue.
 #[derive(Debug)]
 pub struct CreateIssueInput {
-    pub parent_id: Option<i64>,
+    pub parent_id: Option<IssueId>,
     pub title: String,
     pub description: String,
     pub status: Status,
@@ -196,14 +196,14 @@ pub struct UpdateIssueInput {
     pub priority: Option<Priority>,
     pub kind: Option<Kind>,
     pub assignee: Option<String>,
-    pub parent_id: Option<Option<i64>>, // Some(Some(id)) = set, Some(None) = clear, None = no change
+    pub parent_id: Option<Option<IssueId>>, // Some(Some(id)) = set, Some(None) = clear, None = no change
     pub actor: Option<String>,
 }
 
 /// Input for adding a comment to an issue.
 #[derive(Debug)]
 pub struct AddCommentInput {
-    pub issue_id: i64,
+    pub issue_id: IssueId,
     pub body: String,
     pub author: Option<String>,
 }
@@ -211,7 +211,7 @@ pub struct AddCommentInput {
 /// Input for claiming (moving to in-progress) an issue, optionally assigning it.
 #[derive(Debug)]
 pub struct ClaimIssueInput {
-    pub issue_id: i64,
+    pub issue_id: IssueId,
     pub assignee: Option<String>,
 }
 

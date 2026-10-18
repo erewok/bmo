@@ -1,12 +1,12 @@
 use clap::Args;
 
-use crate::cli::parse_id;
 use crate::db::{Repository, find_db, open_db};
+use crate::model::IssueId;
 
 #[derive(Args)]
 pub struct DeleteArgs {
     /// Issue ID
-    pub id: String,
+    pub id: IssueId,
 
     // Todo: support multiple IDs in one command
     // /// List of IDs to delete (alternative to --id)
@@ -21,7 +21,7 @@ pub fn run(args: &DeleteArgs, json: bool, db: Option<String>) -> anyhow::Result<
     let db_path = find_db(db.as_deref())?;
     let repo = open_db(&db_path)?;
 
-    let id = parse_id(&args.id)?;
+    let id = args.id;
 
     // Confirm unless --yes
     if !args.yes {

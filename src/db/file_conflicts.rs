@@ -2,14 +2,14 @@
 // board_snapshot_stats_impl.  sea-query does not support self-JOINs with
 // table aliases cleanly, so we drop down to a prepared statement.
 
-use crate::model::{ConflictingIssue, FileConflict, Status};
+use crate::model::{ConflictingIssue, FileConflict, IssueId, Status};
 
 use super::SqliteRepository;
 
 impl SqliteRepository {
     pub(crate) fn list_file_conflicts_impl(
         &self,
-        issue_id: i64,
+        issue_id: IssueId,
     ) -> anyhow::Result<Vec<FileConflict>> {
         let sql = "
             SELECT
@@ -32,9 +32,9 @@ impl SqliteRepository {
             rusqlite::params![Status::InProgress.label(), issue_id],
             |r| {
                 Ok((
-                    r.get::<_, String>(0)?, // file
-                    r.get::<_, i64>(1)?,    // conflict_id
-                    r.get::<_, String>(2)?, // conflict_title
+                    r.get::<_, String>(0)?,  // file
+                    r.get::<_, IssueId>(1)?, // conflict_id
+                    r.get::<_, String>(2)?,  // conflict_title
                 ))
             },
         )?;
@@ -71,9 +71,9 @@ impl SqliteRepository {
 #[cfg(test)]
 mod tests {
     use crate::db::{CreateIssueInput, Repository, SqliteRepository};
-    use crate::model::{Kind, Priority, Status};
+    use crate::model::{IssueId, Kind, Priority, Status};
 
-    fn make_issue(repo: &SqliteRepository, title: &str, status: Status) -> i64 {
+    fn make_issue(repo: &SqliteRepository, title: &str, status: Status) -> IssueId {
         repo.create_issue(&CreateIssueInput {
             parent_id: None,
             title: title.to_string(),

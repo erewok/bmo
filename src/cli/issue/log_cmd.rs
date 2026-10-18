@@ -1,12 +1,12 @@
 use clap::Args;
 
-use crate::cli::parse_id;
 use crate::db::{Repository, find_db, open_db};
+use crate::model::IssueId;
 
 #[derive(Args)]
 pub struct LogArgs {
     /// Issue ID
-    pub id: String,
+    pub id: IssueId,
     /// Number of entries to show
     #[arg(long, default_value = "10")]
     pub limit: usize,
@@ -16,7 +16,7 @@ pub fn run(args: &LogArgs, json: bool, db: Option<String>) -> anyhow::Result<()>
     let db_path = find_db(db.as_deref())?;
     let repo = open_db(&db_path)?;
 
-    let issue_id = parse_id(&args.id)?;
+    let issue_id = args.id;
     let entries = repo.list_activity(issue_id, args.limit)?;
 
     if json {

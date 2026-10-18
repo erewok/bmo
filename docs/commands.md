@@ -164,13 +164,14 @@ bmo stats --json
 
 Show all issues organized into a Kanban board by status column.
 
-**Synopsis:** `bmo board [--label <label>]... [--priority <priority>]... [--assignee <name>]`
+**Synopsis:** `bmo board [--label <label>]... [--priority <priority>]... [--assignee <name>] [--parent <id>]`
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `-l, --label <label>` | string (repeatable) | (none) | Filter board to issues with this label |
 | `-p, --priority <priority>` | string (repeatable) | (none) | Filter board to this priority |
 | `-a, --assignee <name>` | string | (none) | Filter board to this assignee |
+| `--parent <id>` | issue ID | (none) | Filter board to descendants of this issue, at any depth (`BMO-N` or `N`) |
 
 **Examples:**
 
@@ -178,6 +179,7 @@ Show all issues organized into a Kanban board by status column.
 bmo board
 bmo board --assignee alice --json
 bmo board --priority high --priority critical
+bmo board --parent BMO-1
 ```
 
 **JSON output** (`data` field):
@@ -196,11 +198,12 @@ bmo board --priority high --priority critical
 
 Show issues that are ready to work on — issues that have no unresolved blocking dependencies.
 
-**Synopsis:** `bmo next [--assignee <name>] [--limit <n>]`
+**Synopsis:** `bmo next [--assignee <name>] [--parent <id>] [--limit <n>]`
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `-a, --assignee <name>` | string | (none) | Restrict results to this assignee |
+| `--parent <id>` | issue ID | (none) | Restrict results to descendants of this issue, at any depth (`BMO-N` or `N`) |
 | `--limit <n>` | integer | 10 | Maximum number of results |
 
 **Examples:**
@@ -208,7 +211,12 @@ Show issues that are ready to work on — issues that have no unresolved blockin
 ```
 bmo next
 bmo next --assignee alice --limit 5 --json
+bmo next --parent BMO-1 --json
 ```
+
+With `--parent`, bmo still judges readiness against every open issue. If a descendant waits on an
+open issue outside the parent, the descendant is not ready. If a descendant has sub-issues of its
+own, it is not a leaf, so its sub-issues are reported instead.
 
 **JSON output** (`data` field): array of issue objects.
 
@@ -217,12 +225,14 @@ bmo next --assignee alice --limit 5 --json
 Show a phased execution plan derived from issue dependency relationships. Issues are grouped into
 phases where each phase contains issues that can be worked in parallel.
 
-**Synopsis:** `bmo plan [--assignee <name>] [--phase <n>]`
+**Synopsis:** `bmo plan [--parent <id>] [--assignee <name>] [--phase <n>] [--no-links]`
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--parent <id>` | issue ID | (none) | Plan only the descendants of this issue (`BMO-N` or `N`), plus every open issue that blocks them |
 | `-a, --assignee <name>` | string | (none) | Filter plan to this assignee |
 | `--phase <n>` | integer | (none) | Return only the issues in phase N as a flat array |
+| `--no-links` | flag | false | Ignore link relations; order phases by file conflicts only |
 
 When `--phase` is given, the `data` field is a plain array of issue objects (not the full plan
 envelope), suitable for a coordinator to iterate and dispatch. An out-of-range phase number
@@ -238,7 +248,12 @@ then the result is filtered by assignee within that phase. An empty result is no
 bmo plan --json
 bmo plan --phase 1 --json
 bmo plan --phase 2 --assignee alice --json
+bmo plan --parent BMO-1 --phase 1 --json
 ```
+
+With `--parent`, the plan covers the parent's descendants plus every open issue that blocks one of
+them, directly or through a chain of blockers. Those outside blockers appear in earlier phases, so
+the plan never schedules a descendant before the work it waits on.
 
 **JSON output** (`data` field, without `--phase`):
 
@@ -420,7 +435,7 @@ Aliases: `bmo ls`, `bmo issue list`, `bmo issue ls`
 | `-k, --kind <kind>` | string (repeatable) | (none) | Filter by kind |
 | `--assignee <name>` | string | (none) | Filter by assignee |
 | `-l, --label <label>` | string (repeatable) | (none) | Filter by label (AND semantics) |
-| `--parent <id>` | string | (none) | Filter to children of this issue |
+| `--parent <id>` | issue ID | (none) | Filter to descendants of this issue, at any depth (`BMO-N` or `N`) |
 | `--search <text>` | string | (none) | Full-text search in title and description |
 | `--limit <n>` | integer | 50 | Maximum number of results |
 | `--sort <field>` | string | (none) | Sort field |

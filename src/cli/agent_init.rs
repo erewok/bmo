@@ -30,6 +30,12 @@ pub const CHEAT_SHEET: &str = r#"## BMO Quick Reference
   bmo link add BMO-N blocks BMO-M --json # declare a dependency between issues
   bmo file add BMO-N <PATH> --json # add a file to an issue
 
+### Working Within an Epic (--parent takes BMO-N or N; matches descendants at any depth)
+  bmo create --title "..." --parent BMO-E --json  # create a sub-issue of epic BMO-E
+  bmo list --parent BMO-E --json                  # every issue under the epic, at any depth
+  bmo next --parent BMO-E --json                  # work-ready issues under the epic
+  bmo plan --parent BMO-E --phase 1 --json        # phase 1 of the epic's plan, including outside blockers
+
 ### JSON Parsing
   bmo next --json | jq '.data[] | {id: .id, title: .title}'
   bmo comment list BMO-N --json | jq '.data[] | select(.body | startswith("HANDOFF:")) | .body'
@@ -373,6 +379,8 @@ mod tests {
         assert!(!CHEAT_SHEET.is_empty());
         assert!(CHEAT_SHEET.contains("bmo agent-init"));
         assert!(CHEAT_SHEET.contains("bmo claim"));
+        assert!(CHEAT_SHEET.contains("bmo next --parent BMO-E"));
+        assert!(CHEAT_SHEET.contains("bmo create --title \"...\" --parent BMO-E"));
         assert!(CHEAT_SHEET.contains("HANDOFF:"));
     }
 

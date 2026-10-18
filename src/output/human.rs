@@ -222,6 +222,9 @@ impl Printer for HumanPrinter {
     fn print_issue_detail(&self, detail: &IssueDetail) {
         let issue = &detail.issue;
         println!("\n{} — {}", issue.display_id().bold(), issue.title);
+        if let Some(parent_id) = issue.parent_id {
+            println!("  Parent:   {parent_id}");
+        }
         println!("  Status:   {}", status_colored(issue.status));
         println!("  Priority: {}", priority_colored(issue.priority));
         println!("  Kind:     {}", kind_colored(issue.kind));
@@ -260,13 +263,13 @@ impl Printer for HumanPrinter {
                 let view = rel.view;
                 let other = view.other_id;
                 let direction = match view.kind {
-                    RelationKind::Blocks => format!("→ blocks BMO-{other}"),
-                    RelationKind::BlockedBy => format!("← blocked by BMO-{other}"),
-                    RelationKind::DependsOn => format!("→ depends on BMO-{other}"),
-                    RelationKind::DependencyOf => format!("← dependency of BMO-{other}"),
-                    RelationKind::RelatesTo => format!("↔ relates to BMO-{other}"),
-                    RelationKind::Duplicates => format!("→ duplicates BMO-{other}"),
-                    RelationKind::DuplicateOf => format!("← duplicate of BMO-{other}"),
+                    RelationKind::Blocks => format!("→ blocks {other}"),
+                    RelationKind::BlockedBy => format!("← blocked by {other}"),
+                    RelationKind::DependsOn => format!("→ depends on {other}"),
+                    RelationKind::DependencyOf => format!("← dependency of {other}"),
+                    RelationKind::RelatesTo => format!("↔ relates to {other}"),
+                    RelationKind::Duplicates => format!("→ duplicates {other}"),
+                    RelationKind::DuplicateOf => format!("← duplicate of {other}"),
                 };
                 if view.self_link {
                     println!(
@@ -411,9 +414,9 @@ impl Printer for HumanPrinter {
         for rel in relations {
             table.add_row(vec![
                 Cell::new(rel.id),
-                Cell::new(format!("BMO-{}", rel.from_id)),
+                Cell::new(rel.from_id),
                 Cell::new(rel.kind.label()),
-                Cell::new(format!("BMO-{}", rel.to_id)),
+                Cell::new(rel.to_id),
             ]);
         }
         println!("{table}");

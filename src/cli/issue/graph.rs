@@ -2,21 +2,20 @@ use std::collections::HashSet;
 
 use clap::Args;
 
-use crate::cli::parse_id;
 use crate::db::{Repository, find_db, open_db};
-use crate::model::{IssueRelation, Relation, RelationKind};
+use crate::model::{IssueId, IssueRelation, Relation, RelationKind};
 
 #[derive(Args)]
 pub struct GraphArgs {
     /// Issue ID
-    pub id: String,
+    pub id: IssueId,
 }
 
 pub fn run(args: &GraphArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
     let db_path = find_db(db.as_deref())?;
     let repo = open_db(&db_path)?;
 
-    let issue_id = parse_id(&args.id)?;
+    let issue_id = args.id;
 
     let issue = repo
         .get_issue(issue_id)?
@@ -73,7 +72,11 @@ impl BlockingRole {
 /// Ids of the other issues `relations` names with `role` towards `issue_id`,
 /// in stored order with duplicates (e.g. an edge declared from both ends) removed.
 /// An issue with a directional relation to itself plays both roles.
-fn other_ids_with_role(relations: &[Relation], issue_id: i64, role: BlockingRole) -> Vec<i64> {
+fn other_ids_with_role(
+    relations: &[Relation],
+    issue_id: IssueId,
+    role: BlockingRole,
+) -> Vec<IssueId> {
     let mut other_ids = Vec::new();
     let mut seen_ids = HashSet::new();
     for relation in relations {
@@ -89,7 +92,7 @@ fn other_ids_with_role(relations: &[Relation], issue_id: i64, role: BlockingRole
 }
 
 /// Prints `other_ids` under `heading`, marking `issue_id` itself as an invalid self-link.
-fn print_group(repo: &impl Repository, issue_id: i64, heading: &str, other_ids: &[i64]) {
+fn print_group(repo: &impl Repository, issue_id: IssueId, heading: &str, other_ids: &[IssueId]) {
     if other_ids.is_empty() {
         return;
     }
@@ -101,7 +104,7 @@ fn print_group(repo: &impl Repository, issue_id: i64, heading: &str, other_ids: 
             } else {
                 ""
             };
-            println!("      BMO-{} — {}{flag}", other_id, other.title);
+            println!("      {other_id} — {}{flag}", other.title);
         }
     }
 }

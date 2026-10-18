@@ -2,12 +2,12 @@ use chrono::Utc;
 use sea_query::{Expr, ExprTrait, Order, Query, SqliteQueryBuilder};
 use sea_query_rusqlite::{RusqliteBinder, rusqlite};
 
-use crate::model::{IssueFile, IssueFileIden};
+use crate::model::{IssueFile, IssueFileIden, IssueId};
 
 use super::SqliteRepository;
 
 impl SqliteRepository {
-    pub(crate) fn add_file_impl(&self, issue_id: i64, path: &str) -> anyhow::Result<IssueFile> {
+    pub(crate) fn add_file_impl(&self, issue_id: IssueId, path: &str) -> anyhow::Result<IssueFile> {
         let now = Utc::now().to_rfc3339();
 
         let (ins_sql, ins_values) = Query::insert()
@@ -70,7 +70,7 @@ impl SqliteRepository {
         }
     }
 
-    pub(crate) fn remove_file_impl(&self, issue_id: i64, path: &str) -> anyhow::Result<()> {
+    pub(crate) fn remove_file_impl(&self, issue_id: IssueId, path: &str) -> anyhow::Result<()> {
         let (sql, values) = Query::delete()
             .from_table(IssueFileIden::Table)
             .and_where(Expr::col(IssueFileIden::IssueId).eq(issue_id))
@@ -82,7 +82,7 @@ impl SqliteRepository {
         Ok(())
     }
 
-    pub(crate) fn list_files_impl(&self, issue_id: i64) -> anyhow::Result<Vec<IssueFile>> {
+    pub(crate) fn list_files_impl(&self, issue_id: IssueId) -> anyhow::Result<Vec<IssueFile>> {
         let (sql, values) = Query::select()
             .columns([
                 IssueFileIden::Id,

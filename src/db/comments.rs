@@ -2,7 +2,7 @@ use chrono::Utc;
 use sea_query::{Expr, ExprTrait, Order, Query, SqliteQueryBuilder};
 use sea_query_rusqlite::RusqliteBinder;
 
-use crate::model::{Comment, CommentIden};
+use crate::model::{Comment, CommentIden, IssueId};
 
 use super::{AddCommentInput, SqliteRepository};
 
@@ -42,7 +42,7 @@ impl SqliteRepository {
         })
     }
 
-    pub(crate) fn list_comments_impl(&self, issue_id: i64) -> anyhow::Result<Vec<Comment>> {
+    pub(crate) fn list_comments_impl(&self, issue_id: IssueId) -> anyhow::Result<Vec<Comment>> {
         let (query, values) = Query::select()
             .columns([
                 CommentIden::Id,

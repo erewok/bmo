@@ -91,13 +91,13 @@ fn split_by_file_collisions(issues: Vec<Issue>) -> Vec<Vec<Issue>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Issue, Kind, Priority, Relation, RelationKind, Status};
+    use crate::model::{Issue, IssueId, Kind, Priority, Relation, RelationKind, Status};
     use crate::planner::dag::Dag;
     use chrono::Utc;
 
     fn make_issue(id: i64, files: Vec<&str>) -> Issue {
         Issue {
-            id,
+            id: IssueId(id),
             parent_id: None,
             title: format!("Issue {id}"),
             description: String::new(),
@@ -115,8 +115,8 @@ mod tests {
     fn rel(from: i64, to: i64) -> Relation {
         Relation {
             id: 0,
-            from_id: from,
-            to_id: to,
+            from_id: IssueId(from),
+            to_id: IssueId(to),
             kind: RelationKind::Blocks,
         }
     }
@@ -132,9 +132,9 @@ mod tests {
         let dag = Dag::build(&issues, &relations);
         let plan = generate_plan(&dag).unwrap();
         assert_eq!(plan.total_phases, 3);
-        assert_eq!(plan.phases[0].issues[0].id, 1);
-        assert_eq!(plan.phases[1].issues[0].id, 2);
-        assert_eq!(plan.phases[2].issues[0].id, 3);
+        assert_eq!(plan.phases[0].issues[0].id, IssueId(1));
+        assert_eq!(plan.phases[1].issues[0].id, IssueId(2));
+        assert_eq!(plan.phases[2].issues[0].id, IssueId(3));
     }
 
     #[test]

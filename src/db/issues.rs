@@ -7,7 +7,7 @@ use sea_query_rusqlite::{RusqliteBinder, rusqlite};
 use crate::errors::BmoError;
 use crate::model::issue::IssueLabelIden;
 use crate::model::{
-    Issue, IssueFileIden, IssueFilter, IssueIden, Kind, LabelIden, Priority, Status,
+    Issue, IssueFileIden, IssueFilter, IssueId, IssueIden, Kind, LabelIden, Priority, Status,
 };
 
 use super::{CreateIssueInput, SqliteRepository, UpdateIssueInput};
@@ -39,14 +39,14 @@ impl SqliteRepository {
     /// Returns the direct `parent_id` of `id`, or `None` if the issue has no
     /// parent (or does not exist — callers only invoke this on ids already
     /// known to exist, via the ancestor-chain walk below).
-    fn parent_id_of_impl(&self, id: i64) -> anyhow::Result<Option<i64>> {
+    fn parent_id_of_impl(&self, id: IssueId) -> anyhow::Result<Option<IssueId>> {
         let (sql, values) = Query::select()
             .column(IssueIden::ParentId)
             .from(IssueIden::Table)
             .and_where(Expr::col(IssueIden::Id).eq(id))
             .build_rusqlite(SqliteQueryBuilder);
         let mut stmt = self.conn.prepare_cached(sql.as_str())?;
-        let result = stmt.query_row(&*values.as_params(), |r| r.get::<_, Option<i64>>(0));
+        let result = stmt.query_row(&*values.as_params(), |r| r.get::<_, Option<IssueId>>(0));
         match result {
             Ok(parent_id) => Ok(parent_id),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
@@ -63,8 +63,8 @@ impl SqliteRepository {
     /// should the existing data already contain a cycle.
     fn would_create_parent_cycle_impl(
         &self,
-        issue_id: i64,
-        candidate_parent: i64,
+        issue_id: IssueId,
+        candidate_parent: IssueId,
     ) -> anyhow::Result<bool> {
         if issue_id == candidate_parent {
             return Ok(true);
@@ -125,7 +125,7 @@ impl SqliteRepository {
             ])
             .returning_col(IssueIden::Id)
             .build_rusqlite(SqliteQueryBuilder);
-        let id: i64 = tx.query_row(sql.as_str(), &*values.as_params(), |r| r.get(0))?;
+        let id: IssueId = tx.query_row(sql.as_str(), &*values.as_params(), |r| r.get(0))?;
 
         // A new issue's id is only known after INSERT (SQLite AUTOINCREMENT),
         // so a self-parent can only be detected after the fact. No existing
@@ -159,7 +159,7 @@ impl SqliteRepository {
             .map(|opt| opt.expect("issue must exist after insert"))
     }
 
-    pub(crate) fn get_issue_impl(&self, id: i64) -> anyhow::Result<Option<Issue>> {
+    pub(crate) fn get_issue_impl(&self, id: IssueId) -> anyhow::Result<Option<Issue>> {
         let (sql, values) = Query::select()
             .columns([
                 IssueIden::Id,
@@ -205,7 +205,7 @@ impl SqliteRepository {
             return Ok(issues);
         }
 
-        let ids: Vec<i64> = issues.iter().map(|i| i.id).collect();
+        let ids: Vec<IssueId> = issues.iter().map(|i| i.id).collect();
 
         // Batch label query — one round-trip for all issues.
         let (sql, values) = Query::select()
@@ -223,10 +223,10 @@ impl SqliteRepository {
             .order_by((LabelIden::Table, LabelIden::Name), Order::Asc)
             .build_rusqlite(SqliteQueryBuilder);
 
-        let mut label_map: HashMap<i64, Vec<String>> = HashMap::new();
+        let mut label_map: HashMap<IssueId, Vec<String>> = HashMap::new();
         let mut stmt = self.conn.prepare(sql.as_str())?;
         let rows = stmt.query_map(&*values.as_params(), |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            Ok((row.get::<_, IssueId>(0)?, row.get::<_, String>(1)?))
         })?;
         for row in rows {
             let (issue_id, name) = row?;
@@ -242,10 +242,10 @@ impl SqliteRepository {
             .order_by(IssueFileIden::Path, Order::Asc)
             .build_rusqlite(SqliteQueryBuilder);
 
-        let mut file_map: HashMap<i64, Vec<String>> = HashMap::new();
+        let mut file_map: HashMap<IssueId, Vec<String>> = HashMap::new();
         let mut stmt = self.conn.prepare(sql.as_str())?;
         let rows = stmt.query_map(&*values.as_params(), |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            Ok((row.get::<_, IssueId>(0)?, row.get::<_, String>(1)?))
         })?;
         for row in rows {
             let (issue_id, path) = row?;
@@ -279,7 +279,7 @@ impl SqliteRepository {
 
     pub(crate) fn update_issue_impl(
         &self,
-        id: i64,
+        id: IssueId,
         input: &UpdateIssueInput,
     ) -> anyhow::Result<Issue> {
         let now = Utc::now().to_rfc3339();
@@ -323,7 +323,7 @@ impl SqliteRepository {
                     }
                     q.value(IssueIden::ParentId, *pid)
                 }
-                None => q.value(IssueIden::ParentId, Option::<i64>::None),
+                None => q.value(IssueIden::ParentId, Option::<IssueId>::None),
             };
         }
 
@@ -333,7 +333,9 @@ impl SqliteRepository {
         let (sql, values) = q.build_rusqlite(SqliteQueryBuilder);
         let result = self
             .conn
-            .query_row(sql.as_str(), &*values.as_params(), |r| r.get::<_, i64>(0));
+            .query_row(sql.as_str(), &*values.as_params(), |r| {
+                r.get::<_, IssueId>(0)
+            });
         match result {
             Ok(_) => {}
             Err(rusqlite::Error::QueryReturnedNoRows) => anyhow::bail!("issue {} not found", id),
@@ -344,7 +346,7 @@ impl SqliteRepository {
             .map(|opt| opt.expect("issue must exist after update"))
     }
 
-    pub(crate) fn delete_issue_impl(&self, id: i64) -> anyhow::Result<()> {
+    pub(crate) fn delete_issue_impl(&self, id: IssueId) -> anyhow::Result<()> {
         let (sql, values) = Query::delete()
             .from_table(IssueIden::Table)
             .and_where(Expr::col(IssueIden::Id).eq(id))
@@ -352,7 +354,9 @@ impl SqliteRepository {
             .build_rusqlite(SqliteQueryBuilder);
         let result = self
             .conn
-            .query_row(sql.as_str(), &*values.as_params(), |r| r.get::<_, i64>(0));
+            .query_row(sql.as_str(), &*values.as_params(), |r| {
+                r.get::<_, IssueId>(0)
+            });
         match result {
             Ok(_) => Ok(()),
             Err(rusqlite::Error::QueryReturnedNoRows) => anyhow::bail!("issue {} not found", id),
@@ -381,7 +385,7 @@ impl SqliteRepository {
         Ok(changed as u64)
     }
 
-    pub(crate) fn get_sub_issues_impl(&self, parent_id: i64) -> anyhow::Result<Vec<Issue>> {
+    pub(crate) fn get_sub_issues_impl(&self, parent_id: IssueId) -> anyhow::Result<Vec<Issue>> {
         let (sql, values) = Query::select()
             .columns([
                 IssueIden::Id,
@@ -411,7 +415,7 @@ impl SqliteRepository {
         Ok(issues)
     }
 
-    pub(crate) fn get_issue_label_names(&self, issue_id: i64) -> anyhow::Result<Vec<String>> {
+    pub(crate) fn get_issue_label_names(&self, issue_id: IssueId) -> anyhow::Result<Vec<String>> {
         let (sql, values) = Query::select()
             .column(LabelIden::Name)
             .from(LabelIden::Table)
@@ -428,7 +432,7 @@ impl SqliteRepository {
         Ok(rows.collect::<rusqlite::Result<Vec<String>>>()?)
     }
 
-    pub(crate) fn get_issue_file_paths(&self, issue_id: i64) -> anyhow::Result<Vec<String>> {
+    pub(crate) fn get_issue_file_paths(&self, issue_id: IssueId) -> anyhow::Result<Vec<String>> {
         let (sql, values) = Query::select()
             .column(IssueFileIden::Path)
             .from(IssueFileIden::Table)
@@ -536,7 +540,7 @@ impl SqliteRepository {
 mod tests {
     use super::super::{CreateIssueInput, SqliteRepository, UpdateIssueInput};
     use crate::errors::BmoError;
-    use crate::model::{IssueFilter, Kind, Priority, Status};
+    use crate::model::{IssueFilter, IssueId, Kind, Priority, Status};
 
     fn make_repo() -> SqliteRepository {
         SqliteRepository::open_in_memory().expect("in-memory db")
@@ -722,14 +726,14 @@ mod tests {
         assert_eq!(remaining.len(), 1, "only the review issue should remain");
     }
 
-    fn create_input_with_parent(title: &str, parent_id: Option<i64>) -> CreateIssueInput {
+    fn create_input_with_parent(title: &str, parent_id: Option<IssueId>) -> CreateIssueInput {
         CreateIssueInput {
             parent_id,
             ..create_input(title, Status::Backlog)
         }
     }
 
-    fn update_parent_input(parent_id: Option<i64>) -> UpdateIssueInput {
+    fn update_parent_input(parent_id: Option<IssueId>) -> UpdateIssueInput {
         UpdateIssueInput {
             title: None,
             description: None,
@@ -760,7 +764,7 @@ mod tests {
 
         // The next assigned id in a fresh in-memory DB is 1.
         let err = repo
-            .create_issue_impl(&create_input_with_parent("self-parent", Some(1)))
+            .create_issue_impl(&create_input_with_parent("self-parent", Some(IssueId(1))))
             .expect_err("self-parent create must be rejected");
         assert_validation_err(err, "own parent");
 
@@ -791,7 +795,7 @@ mod tests {
 
         // The next assigned id in a fresh in-memory DB is 1.
         let err = repo
-            .create_issue_impl(&create_input_with_parent("self-parent", Some(1)))
+            .create_issue_impl(&create_input_with_parent("self-parent", Some(IssueId(1))))
             .expect_err("self-parent create must be rejected");
         assert_validation_err(err, "own parent");
 
@@ -808,7 +812,8 @@ mod tests {
             .create_issue_impl(&create_input("first-real-issue", Status::Backlog))
             .unwrap();
         assert_eq!(
-            next.id, 1,
+            next.id,
+            IssueId(1),
             "rejected self-parent insert must roll back completely, including the autoincrement counter"
         );
     }

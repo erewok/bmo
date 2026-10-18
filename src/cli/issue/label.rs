@@ -1,7 +1,7 @@
 use clap::{Args, Subcommand};
 
-use crate::cli::parse_id;
 use crate::db::{Repository, find_db, open_db};
+use crate::model::IssueId;
 use crate::output::{OutputMode, make_printer};
 
 #[derive(Subcommand)]
@@ -20,7 +20,7 @@ pub enum LabelCommands {
 #[derive(Args)]
 pub struct AddArgs {
     /// Issue ID
-    pub id: String,
+    pub id: IssueId,
     /// Label name
     pub name: String,
     /// Label color (hex)
@@ -31,7 +31,7 @@ pub struct AddArgs {
 #[derive(Args)]
 pub struct RmArgs {
     /// Issue ID
-    pub id: String,
+    pub id: IssueId,
     /// Label name
     pub name: String,
 }
@@ -39,7 +39,7 @@ pub struct RmArgs {
 #[derive(Args)]
 pub struct ListArgs {
     /// Issue ID
-    pub id: String,
+    pub id: IssueId,
 }
 
 #[derive(Args)]
@@ -52,7 +52,7 @@ pub fn run_add(args: &AddArgs, json: bool, db: Option<String>) -> anyhow::Result
     let db_path = find_db(db.as_deref())?;
     let repo = open_db(&db_path)?;
 
-    let issue_id = parse_id(&args.id)?;
+    let issue_id = args.id;
     let label = repo.get_or_create_label(&args.name, args.color.as_deref())?;
     repo.add_label_to_issue(issue_id, label.id)?;
 
@@ -69,7 +69,7 @@ pub fn run_rm(args: &RmArgs, json: bool, db: Option<String>) -> anyhow::Result<(
     let db_path = find_db(db.as_deref())?;
     let repo = open_db(&db_path)?;
 
-    let issue_id = parse_id(&args.id)?;
+    let issue_id = args.id;
     repo.remove_label_from_issue(issue_id, &args.name)?;
 
     if json {
@@ -90,7 +90,7 @@ pub fn run_list(args: &ListArgs, json: bool, db: Option<String>) -> anyhow::Resu
         OutputMode::Human
     });
 
-    let issue_id = parse_id(&args.id)?;
+    let issue_id = args.id;
     let labels = repo.list_issue_labels(issue_id)?;
     printer.print_labels(&labels);
     Ok(())

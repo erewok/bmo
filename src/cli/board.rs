@@ -2,7 +2,7 @@ use clap::Args;
 
 use crate::db::{Repository, find_db, open_db};
 use crate::filter::FilterBuilder;
-use crate::model::Status;
+use crate::model::{IssueId, Status};
 use crate::output::{BoardColumns, OutputMode, make_printer};
 
 #[derive(Args)]
@@ -16,6 +16,9 @@ pub struct BoardArgs {
     /// Filter by assignee
     #[arg(short, long)]
     pub assignee: Option<String>,
+    /// Only show descendants of this issue: children, their children, and so on (e.g. 5 or BMO-5)
+    #[arg(long)]
+    pub parent: Option<IssueId>,
 }
 
 pub fn run(args: &BoardArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
@@ -31,7 +34,10 @@ pub fn run(args: &BoardArgs, json: bool, db: Option<String>) -> anyhow::Result<(
         priorities: args.priority.clone(),
         labels: args.label.clone(),
         assignee: args.assignee.clone(),
-        findall: true,
+        descendant_of: args.parent,
+        // The board has a done column, so keep done issues. `findall` would
+        // also keep them, but it skips every other filter as well.
+        include_done: true,
         limit: 500,
         ..Default::default()
     }

@@ -1,9 +1,8 @@
 use clap::Args;
 
-use crate::cli::parse_id;
 use crate::db::{CreateIssueInput, Repository, find_db, open_db};
 use crate::errors::{BmoError, ErrorCode};
-use crate::model::{Kind, Priority, Status};
+use crate::model::{IssueId, Kind, Priority, Status};
 use crate::output::{OutputMode, make_printer};
 
 #[derive(Args)]
@@ -28,7 +27,7 @@ pub struct CreateArgs {
     pub assignee: Option<String>,
     /// Parent issue ID
     #[arg(long)]
-    pub parent: Option<String>,
+    pub parent: Option<IssueId>,
     /// Labels (repeatable)
     #[arg(short, long)]
     pub label: Vec<String>,
@@ -49,7 +48,7 @@ pub fn run(args: &CreateArgs, json: bool, db: Option<String>) -> anyhow::Result<
     let status: Status = args.status.parse()?;
     let priority: Priority = args.priority.parse()?;
     let kind: Kind = args.kind.parse()?;
-    let parent_id = args.parent.as_deref().map(parse_id).transpose()?;
+    let parent_id = args.parent;
 
     let input = CreateIssueInput {
         parent_id,

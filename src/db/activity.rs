@@ -3,7 +3,7 @@ use sea_query::{Expr, ExprTrait, Order, Query, SqliteQueryBuilder};
 use sea_query_rusqlite::{RusqliteBinder, rusqlite};
 
 use crate::model::activity::NewActivityEntry;
-use crate::model::{ActivityEntry, ActivityEntryIden};
+use crate::model::{ActivityEntry, ActivityEntryIden, IssueId};
 
 use super::SqliteRepository;
 
@@ -33,7 +33,7 @@ impl SqliteRepository {
 
     pub(crate) fn list_activity_impl(
         &self,
-        issue_id: i64,
+        issue_id: IssueId,
         limit: usize,
     ) -> anyhow::Result<Vec<ActivityEntry>> {
         let mut q = Query::select();

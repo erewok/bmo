@@ -1,7 +1,7 @@
 use clap::{Args, Subcommand};
 
-use crate::cli::parse_id;
 use crate::db::{Repository, find_db, open_db};
+use crate::model::IssueId;
 
 #[derive(Subcommand)]
 pub enum FileCommands {
@@ -19,7 +19,7 @@ pub enum FileCommands {
 #[derive(Args)]
 pub struct AddArgs {
     /// Issue ID
-    pub id: String,
+    pub id: IssueId,
     /// File path
     pub path: String,
 }
@@ -27,7 +27,7 @@ pub struct AddArgs {
 #[derive(Args)]
 pub struct RmArgs {
     /// Issue ID
-    pub id: String,
+    pub id: IssueId,
     /// File path
     pub path: String,
 }
@@ -35,20 +35,20 @@ pub struct RmArgs {
 #[derive(Args)]
 pub struct ListArgs {
     /// Issue ID
-    pub id: String,
+    pub id: IssueId,
 }
 
 #[derive(Args)]
 pub struct ConflictsArgs {
     /// Issue ID
-    pub id: String,
+    pub id: IssueId,
 }
 
 pub fn run_add(args: &AddArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
     let db_path = find_db(db.as_deref())?;
     let repo = open_db(&db_path)?;
 
-    let issue_id = parse_id(&args.id)?;
+    let issue_id = args.id;
     let file = repo.add_file(issue_id, &args.path)?;
 
     if json {
@@ -64,7 +64,7 @@ pub fn run_rm(args: &RmArgs, json: bool, db: Option<String>) -> anyhow::Result<(
     let db_path = find_db(db.as_deref())?;
     let repo = open_db(&db_path)?;
 
-    let issue_id = parse_id(&args.id)?;
+    let issue_id = args.id;
     repo.remove_file(issue_id, &args.path)?;
 
     if json {
@@ -80,7 +80,7 @@ pub fn run_list(args: &ListArgs, json: bool, db: Option<String>) -> anyhow::Resu
     let db_path = find_db(db.as_deref())?;
     let repo = open_db(&db_path)?;
 
-    let issue_id = parse_id(&args.id)?;
+    let issue_id = args.id;
     let files = repo.list_files(issue_id)?;
 
     if json {
@@ -100,7 +100,7 @@ pub fn run_conflicts(args: &ConflictsArgs, json: bool, db: Option<String>) -> an
     let db_path = find_db(db.as_deref())?;
     let repo = open_db(&db_path)?;
 
-    let issue_id = parse_id(&args.id)?;
+    let issue_id = args.id;
     let conflicts = repo.list_file_conflicts(issue_id)?;
 
     if json {
@@ -110,10 +110,10 @@ pub fn run_conflicts(args: &ConflictsArgs, json: bool, db: Option<String>) -> an
     } else if conflicts.is_empty() {
         println!("No conflicts.");
     } else {
-        println!("File conflicts for BMO-{}:", issue_id);
+        println!("File conflicts for {issue_id}:");
         for c in &conflicts {
             for other in &c.conflicts_with {
-                println!("  {}  →  BMO-{} ({})", c.file, other.id, other.title);
+                println!("  {}  →  {} ({})", c.file, other.id, other.title);
             }
         }
     }

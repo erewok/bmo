@@ -1,14 +1,20 @@
 use clap::Args;
 
+use crate::cli::open_descendant_ids;
 use crate::db::{Repository, find_db, open_db};
 use crate::errors::ErrorCode;
-use crate::model::IssueFilter;
+use crate::model::{IssueFilter, IssueId};
 use crate::output::{ExecutionPlan, OutputMode, Phase, make_printer};
 use crate::planner::dag::Dag;
 use crate::planner::plan::generate_plan;
 
 #[derive(Args)]
 pub struct PlanArgs {
+    /// Plan only the descendants of this issue (e.g. 5 or BMO-5), plus every
+    /// open issue that blocks one of them, even from outside the parent
+    #[arg(long)]
+    pub parent: Option<IssueId>,
+
     /// Filter by assignee (requires --phase)
     #[arg(short, long)]
     pub assignee: Option<String>,
@@ -45,7 +51,12 @@ pub fn run(args: &PlanArgs, json: bool, db: Option<String>) -> anyhow::Result<()
         repo.list_all_relations()?
     };
 
-    let dag = Dag::build(&all_issues, &all_relations);
+    // Build the graph from every open issue before scoping it to `--parent`,
+    // so that the scoped graph still sees blockers outside the parent.
+    let mut dag = Dag::build(&all_issues, &all_relations);
+    if let Some(parent) = args.parent {
+        dag = dag.scoped_to(&open_descendant_ids(&repo, parent)?);
+    }
 
     // NOTE: The --assignee flag is declared in PlanArgs but generate_plan() operates on a
     // pre-built Dag and has no assignee parameter. As of this implementation, assignee
