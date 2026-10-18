@@ -2,6 +2,7 @@ use clap::Args;
 
 use crate::db::{Repository, find_db, open_db};
 use crate::filter::FilterBuilder;
+use crate::model::IssueId;
 use crate::output::{OutputMode, make_printer};
 
 #[derive(Args)]
@@ -24,9 +25,9 @@ pub struct ListArgs {
     /// Filter by label (AND semantics, repeatable)
     #[arg(short, long)]
     pub label: Vec<String>,
-    /// Filter by parent ID
+    /// Filter to descendants of this issue: children, their children, and so on (e.g. 5 or BMO-5)
     #[arg(long)]
-    pub parent: Option<String>,
+    pub parent: Option<IssueId>,
     /// Search in title and description
     #[arg(long)]
     pub search: Option<String>,
@@ -85,7 +86,7 @@ pub fn run(args: &ListArgs, json: bool, db: Option<String>) -> anyhow::Result<()
         kinds: args.kind.clone(),
         assignee: args.assignee.clone(),
         labels: args.label.clone(),
-        parent_id: args.parent.clone(),
+        descendant_of: args.parent,
         search: args.search.clone(),
         sort: args.sort.clone(),
         limit: args.limit,

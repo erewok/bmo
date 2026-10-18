@@ -1,7 +1,7 @@
 use clap::{Args, Subcommand};
 
-use crate::cli::parse_id;
 use crate::db::{AddCommentInput, Repository, find_db, open_db};
+use crate::model::IssueId;
 use crate::output::{OutputMode, make_printer};
 
 #[derive(Subcommand)]
@@ -15,7 +15,7 @@ pub enum CommentCommands {
 #[derive(Args)]
 pub struct AddArgs {
     /// Issue ID
-    pub id: String,
+    pub id: IssueId,
     /// Comment body
     #[arg(short, long)]
     pub body: String,
@@ -27,14 +27,14 @@ pub struct AddArgs {
 #[derive(Args)]
 pub struct ListArgs {
     /// Issue ID
-    pub id: String,
+    pub id: IssueId,
 }
 
 pub fn run_add(args: &AddArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
     let db_path = find_db(db.as_deref())?;
     let repo = open_db(&db_path)?;
 
-    let issue_id = parse_id(&args.id)?;
+    let issue_id = args.id;
     let comment = repo.add_comment(&AddCommentInput {
         issue_id,
         body: args.body.clone(),
@@ -60,7 +60,7 @@ pub fn run_list(args: &ListArgs, json: bool, db: Option<String>) -> anyhow::Resu
         OutputMode::Human
     });
 
-    let issue_id = parse_id(&args.id)?;
+    let issue_id = args.id;
     let comments = repo.list_comments(issue_id)?;
     printer.print_comments(&comments);
     Ok(())

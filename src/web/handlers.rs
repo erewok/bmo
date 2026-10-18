@@ -9,7 +9,7 @@ use minijinja::context;
 use serde::Deserialize;
 
 use crate::db::{AddCommentInput, Repository, open_db};
-use crate::model::{IssueFilter, Kind, Priority, Status};
+use crate::model::{IssueFilter, IssueId, Kind, Priority, Status};
 
 use super::AppState;
 
@@ -24,6 +24,8 @@ pub struct IssueQuery {
     pub status: Option<String>,
     pub kind: Option<String>,
     pub priority: Option<String>,
+    /// Restricts results to descendants of this issue id (`?parent=5`)
+    pub parent: Option<IssueId>,
     /// defaults to false; pass ?all=true to include done issues
     pub all: Option<bool>,
 }
@@ -133,7 +135,7 @@ pub async fn issue_list_page(State(state): State<AppState>) -> impl IntoResponse
 
 pub async fn issue_detail_page(
     State(state): State<AppState>,
-    Path(id): Path<i64>,
+    Path(id): Path<IssueId>,
 ) -> impl IntoResponse {
     let result = tokio::task::spawn_blocking(move || {
         let repo = open_db(&state.db_path)?;
@@ -218,6 +220,7 @@ pub async fn api_issue_list(
             status: status_filter.clone(),
             kind: kind_filter.clone(),
             priority: priority_filter.clone(),
+            descendant_of: params.parent,
             search: params.q.clone(),
             limit: Some(limit),
             offset: Some(offset),
@@ -230,6 +233,7 @@ pub async fn api_issue_list(
             status: status_filter,
             kind: kind_filter,
             priority: priority_filter,
+            descendant_of: params.parent,
             search: params.q,
             limit: None,
             offset: None,
@@ -272,7 +276,7 @@ pub async fn api_issue_list(
 
 pub async fn api_issue_detail(
     State(state): State<AppState>,
-    Path(id): Path<i64>,
+    Path(id): Path<IssueId>,
 ) -> impl IntoResponse {
     let result = tokio::task::spawn_blocking(move || {
         let repo = open_db(&state.db_path)?;
@@ -404,7 +408,7 @@ pub enum CommentError {
 /// Returns 201 with the created comment on success.
 pub async fn api_post_comment(
     State(state): State<AppState>,
-    Path(id): Path<i64>,
+    Path(id): Path<IssueId>,
     Json(payload): Json<PostCommentBody>,
 ) -> impl IntoResponse {
     // Validate body is non-empty before hitting the DB.
@@ -560,10 +564,10 @@ pub async fn api_graph(State(state): State<AppState>) -> impl IntoResponse {
         use std::collections::{HashMap, HashSet};
 
         // Index all issues by id for parent lookups.
-        let by_id: HashMap<i64, _> = all_issues.iter().map(|i| (i.id, i)).collect();
+        let by_id: HashMap<IssueId, _> = all_issues.iter().map(|i| (i.id, i)).collect();
 
         // Active issues: status != done.
-        let active_ids: HashSet<i64> = all_issues
+        let active_ids: HashSet<IssueId> = all_issues
             .iter()
             .filter(|i| i.status != Status::Done)
             .map(|i| i.id)
@@ -580,7 +584,7 @@ pub async fn api_graph(State(state): State<AppState>) -> impl IntoResponse {
         // Future work: if multi-level traversal is ever wanted, consider adding
         // a `?depth=N` query parameter to this endpoint and walking the ancestor
         // chain up to N steps.
-        let completed_parent_ids: HashSet<i64> = all_issues
+        let completed_parent_ids: HashSet<IssueId> = all_issues
             .iter()
             .filter(|i| active_ids.contains(&i.id))
             .filter_map(|i| i.parent_id)
@@ -595,7 +599,8 @@ pub async fn api_graph(State(state): State<AppState>) -> impl IntoResponse {
             .collect();
 
         // Union of node ids that will appear in the graph.
-        let visible_ids: HashSet<i64> = active_ids.union(&completed_parent_ids).copied().collect();
+        let visible_ids: HashSet<IssueId> =
+            active_ids.union(&completed_parent_ids).copied().collect();
 
         // Build node list: active nodes first, then completed parents.
         let mut nodes: Vec<serde_json::Value> = Vec::new();

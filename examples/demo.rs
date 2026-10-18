@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use bmo::db::{AddCommentInput, CreateIssueInput, Repository, UpdateIssueInput, open_db};
 use bmo::model::relation::RelationKind;
-use bmo::model::{IssueFilter, Kind, Priority, Status};
+use bmo::model::{IssueFilter, IssueId, Kind, Priority, Status};
 use bmo::web::start_server;
 
 // ---------------------------------------------------------------------------
@@ -41,12 +41,12 @@ fn narrate(msg: &str) {
     println!("  >> {msg}");
 }
 
-fn created(kind: &str, id: i64, title: &str) {
-    println!("  [+] {kind} BMO-{id}: {title}");
+fn created(kind: &str, id: IssueId, title: &str) {
+    println!("  [+] {kind} {id}: {title}");
 }
 
-fn moved(id: i64, from: Status, to: Status) {
-    println!("  [~] BMO-{id}: {} -> {}", from.label(), to.label());
+fn moved(id: IssueId, from: Status, to: Status) {
+    println!("  [~] {id}: {} -> {}", from.label(), to.label());
 }
 
 fn find_free_port() -> u16 {

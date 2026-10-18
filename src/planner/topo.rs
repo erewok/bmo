@@ -1,32 +1,34 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use crate::model::IssueId;
+
 use super::dag::Dag;
 
 /// Topological sort using Kahn's algorithm.
 /// Returns levels (phases) in order, where each level can run in parallel.
 /// Returns Err if a cycle is detected, naming each cycle separately and only
 /// the issues on a cycle (not issues merely downstream of one).
-pub fn topological_levels(dag: &Dag) -> anyhow::Result<Vec<Vec<i64>>> {
+pub fn topological_levels(dag: &Dag) -> anyhow::Result<Vec<Vec<IssueId>>> {
     // in_degree = number of unresolved blockers for each node
-    let mut in_degree: HashMap<i64, usize> = dag
+    let mut in_degree: HashMap<IssueId, usize> = dag
         .nodes
         .keys()
         .map(|&id| (id, dag.nodes[&id].reverse.len()))
         .collect();
 
     // Start with nodes that have no blockers
-    let mut queue: VecDeque<i64> = in_degree
+    let mut queue: VecDeque<IssueId> = in_degree
         .iter()
         .filter(|(_, d)| **d == 0)
         .map(|(id, _)| *id)
         .collect();
 
-    let mut levels: Vec<Vec<i64>> = Vec::new();
+    let mut levels: Vec<Vec<IssueId>> = Vec::new();
     let mut processed = 0usize;
 
     while !queue.is_empty() {
         // Collect current level — all nodes currently unblocked
-        let mut current_level: Vec<i64> = queue.drain(..).collect();
+        let mut current_level: Vec<IssueId> = queue.drain(..).collect();
         current_level.sort(); // deterministic ordering within a phase
         processed += current_level.len();
 
@@ -81,7 +83,7 @@ const CYCLE_HINT: &str = "hint: `A → B` means A blocks B. Pick an edge `A → 
      `bmo link remove <relation id>` for each one (an edge can be stored more than once, e.g. as \
      both `A blocks B` and `B depends-on A`). Repeat until no cycle remains.";
 
-fn display_ids(dag: &Dag, ids: &[i64], separator: &str) -> String {
+fn display_ids(dag: &Dag, ids: &[IssueId], separator: &str) -> String {
     ids.iter()
         .map(|id| dag.nodes[id].issue.display_id())
         .collect::<Vec<_>>()
@@ -89,8 +91,8 @@ fn display_ids(dag: &Dag, ids: &[i64], separator: &str) -> String {
 }
 
 /// Ids of the issues whose blockers were never all resolved, in ascending order.
-fn still_blocked_ids(in_degree: &HashMap<i64, usize>) -> Vec<i64> {
-    let mut ids: Vec<i64> = in_degree
+fn still_blocked_ids(in_degree: &HashMap<IssueId, usize>) -> Vec<IssueId> {
+    let mut ids: Vec<IssueId> = in_degree
         .iter()
         .filter(|(_, remaining)| **remaining > 0)
         .map(|(id, _)| *id)
@@ -102,14 +104,14 @@ fn still_blocked_ids(in_degree: &HashMap<i64, usize>) -> Vec<i64> {
 /// The issues of one strongly connected component that contains a cycle.
 enum CycleGroup {
     /// A single cycle, in blocking order starting at its lowest id.
-    Simple(Vec<i64>),
+    Simple(Vec<IssueId>),
     /// Several cycles sharing issues, as every `(blocker, blocked)` edge
     /// between members of the component, in ascending order.
-    Overlapping(Vec<(i64, i64)>),
+    Overlapping(Vec<(IssueId, IssueId)>),
 }
 
 impl CycleGroup {
-    fn lowest_id(&self) -> i64 {
+    fn lowest_id(&self) -> IssueId {
         match self {
             CycleGroup::Simple(ids) => ids[0],
             // Every member of a cycle blocks some member, so the lowest member
@@ -149,7 +151,7 @@ fn cycle_groups(dag: &Dag) -> Vec<CycleGroup> {
 
 /// Classifies one strongly connected component, or `None` if it is a lone
 /// issue that does not block itself.
-fn cycle_group(dag: &Dag, mut members: Vec<i64>) -> Option<CycleGroup> {
+fn cycle_group(dag: &Dag, mut members: Vec<IssueId>) -> Option<CycleGroup> {
     members.sort_unstable();
     let lowest = members[0];
     if members.len() == 1 && !dag.nodes[&lowest].forward.contains(&lowest) {
@@ -159,7 +161,7 @@ fn cycle_group(dag: &Dag, mut members: Vec<i64>) -> Option<CycleGroup> {
     // A component prints as one simple cycle only if every member blocks
     // exactly one other member of the same component; that single successor
     // is the next issue in the printed cycle order.
-    let mut next_in_cycle: HashMap<i64, i64> = HashMap::new();
+    let mut next_in_cycle: HashMap<IssueId, IssueId> = HashMap::new();
     for &member in &members {
         let mut successors_in_component = dag.nodes[&member]
             .forward
@@ -181,8 +183,8 @@ fn cycle_group(dag: &Dag, mut members: Vec<i64>) -> Option<CycleGroup> {
 }
 
 /// Every `(blocker, blocked)` edge between two of `sorted_members`, in ascending order.
-fn edges_within(dag: &Dag, sorted_members: &[i64]) -> Vec<(i64, i64)> {
-    let mut edges: Vec<(i64, i64)> = sorted_members
+fn edges_within(dag: &Dag, sorted_members: &[IssueId]) -> Vec<(IssueId, IssueId)> {
+    let mut edges: Vec<(IssueId, IssueId)> = sorted_members
         .iter()
         .flat_map(|&blocker| {
             dag.nodes[&blocker]
@@ -196,7 +198,7 @@ fn edges_within(dag: &Dag, sorted_members: &[i64]) -> Vec<(i64, i64)> {
     edges
 }
 
-fn strongly_connected_components(dag: &Dag) -> Vec<Vec<i64>> {
+fn strongly_connected_components(dag: &Dag) -> Vec<Vec<IssueId>> {
     let mut search = ComponentSearch::default();
     for &root in dag.nodes.keys() {
         if !search.discovery_index.contains_key(&root) {
@@ -209,17 +211,17 @@ fn strongly_connected_components(dag: &Dag) -> Vec<Vec<i64>> {
 /// Tarjan's strongly-connected-components search over `forward` edges.
 #[derive(Default)]
 struct ComponentSearch {
-    discovery_index: HashMap<i64, usize>,
-    lowest_reachable_index: HashMap<i64, usize>,
-    unassigned: Vec<i64>,
-    is_unassigned: HashSet<i64>,
-    components: Vec<Vec<i64>>,
+    discovery_index: HashMap<IssueId, usize>,
+    lowest_reachable_index: HashMap<IssueId, usize>,
+    unassigned: Vec<IssueId>,
+    is_unassigned: HashSet<IssueId>,
+    components: Vec<Vec<IssueId>>,
 }
 
 impl ComponentSearch {
     // Iterative rather than recursive: a recursive walk overflows the call
     // stack on a dependency chain a few thousand issues long.
-    fn explore_from(&mut self, dag: &Dag, root: i64) {
+    fn explore_from(&mut self, dag: &Dag, root: IssueId) {
         self.discover(root);
         let mut path = vec![(root, dag.nodes[&root].forward.iter())];
 
@@ -244,7 +246,7 @@ impl ComponentSearch {
         }
     }
 
-    fn discover(&mut self, id: i64) {
+    fn discover(&mut self, id: IssueId) {
         let index = self.discovery_index.len();
         self.discovery_index.insert(id, index);
         self.lowest_reachable_index.insert(id, index);
@@ -252,13 +254,13 @@ impl ComponentSearch {
         self.is_unassigned.insert(id);
     }
 
-    fn lower_reachable_index(&mut self, id: i64, candidate: usize) {
+    fn lower_reachable_index(&mut self, id: IssueId, candidate: usize) {
         self.lowest_reachable_index
             .entry(id)
             .and_modify(|lowest| *lowest = (*lowest).min(candidate));
     }
 
-    fn finish(&mut self, id: i64, parent: Option<i64>) {
+    fn finish(&mut self, id: IssueId, parent: Option<IssueId>) {
         let lowest_reachable = self.lowest_reachable_index[&id];
         if let Some(parent) = parent {
             self.lower_reachable_index(parent, lowest_reachable);
@@ -286,9 +288,13 @@ mod tests {
     use crate::planner::dag::Dag;
     use chrono::Utc;
 
+    fn ids(raw: &[i64]) -> Vec<IssueId> {
+        raw.iter().copied().map(IssueId).collect()
+    }
+
     fn make_issue(id: i64) -> Issue {
         Issue {
-            id,
+            id: IssueId(id),
             parent_id: None,
             title: format!("Issue {id}"),
             description: String::new(),
@@ -306,8 +312,8 @@ mod tests {
     fn rel(from: i64, to: i64) -> Relation {
         Relation {
             id: 0,
-            from_id: from,
-            to_id: to,
+            from_id: IssueId(from),
+            to_id: IssueId(to),
             kind: RelationKind::Blocks,
         }
     }
@@ -315,8 +321,8 @@ mod tests {
     fn rel_of_kind(from: i64, to: i64, kind: RelationKind) -> Relation {
         Relation {
             id: 0,
-            from_id: from,
-            to_id: to,
+            from_id: IssueId(from),
+            to_id: IssueId(to),
             kind,
         }
     }
@@ -335,9 +341,9 @@ mod tests {
         let dag = Dag::build(&issues, &relations);
         let levels = topological_levels(&dag).unwrap();
         assert_eq!(levels.len(), 3);
-        assert_eq!(levels[0], vec![1]);
-        assert_eq!(levels[1], vec![2]);
-        assert_eq!(levels[2], vec![3]);
+        assert_eq!(levels[0], ids(&[1]));
+        assert_eq!(levels[1], ids(&[2]));
+        assert_eq!(levels[2], ids(&[3]));
     }
 
     #[test]
@@ -348,10 +354,10 @@ mod tests {
         let dag = Dag::build(&issues, &relations);
         let levels = topological_levels(&dag).unwrap();
         assert_eq!(levels.len(), 2);
-        assert_eq!(levels[0], vec![1]);
+        assert_eq!(levels[0], ids(&[1]));
         let mut second = levels[1].clone();
         second.sort();
-        assert_eq!(second, vec![2, 3]);
+        assert_eq!(second, ids(&[2, 3]));
     }
 
     // Regression: a relation pointing at an issue that is not a node (because it
@@ -366,7 +372,7 @@ mod tests {
         let dag = Dag::build(&issues, &relations);
 
         let levels = topological_levels(&dag).unwrap();
-        assert_eq!(levels, vec![vec![1]]);
+        assert_eq!(levels, vec![ids(&[1])]);
     }
 
     #[test]
@@ -378,7 +384,7 @@ mod tests {
         let dag = Dag::build(&issues, &relations);
 
         let levels = topological_levels(&dag).unwrap();
-        assert_eq!(levels, vec![vec![2]]);
+        assert_eq!(levels, vec![ids(&[2])]);
     }
 
     #[test]
@@ -390,7 +396,7 @@ mod tests {
         let dag = Dag::build(&issues, &relations);
 
         let levels = topological_levels(&dag).unwrap();
-        assert_eq!(levels, vec![vec![2], vec![3]]);
+        assert_eq!(levels, vec![ids(&[2]), ids(&[3])]);
     }
 
     #[test]
@@ -410,14 +416,14 @@ mod tests {
         let relations = vec![
             Relation {
                 id: 0,
-                from_id: 1,
-                to_id: 2,
+                from_id: IssueId(1),
+                to_id: IssueId(2),
                 kind: RelationKind::BlockedBy,
             },
             Relation {
                 id: 0,
-                from_id: 2,
-                to_id: 1,
+                from_id: IssueId(2),
+                to_id: IssueId(1),
                 kind: RelationKind::BlockedBy,
             },
         ];
@@ -432,14 +438,14 @@ mod tests {
         let relations = vec![
             Relation {
                 id: 0,
-                from_id: 1,
-                to_id: 2,
+                from_id: IssueId(1),
+                to_id: IssueId(2),
                 kind: RelationKind::DependencyOf,
             },
             Relation {
                 id: 0,
-                from_id: 1,
-                to_id: 2,
+                from_id: IssueId(1),
+                to_id: IssueId(2),
                 kind: RelationKind::DependsOn,
             },
         ];
@@ -455,23 +461,23 @@ mod tests {
         let relations = vec![
             Relation {
                 id: 0,
-                from_id: 2,
-                to_id: 1,
+                from_id: IssueId(2),
+                to_id: IssueId(1),
                 kind: RelationKind::BlockedBy,
             },
             Relation {
                 id: 0,
-                from_id: 3,
-                to_id: 2,
+                from_id: IssueId(3),
+                to_id: IssueId(2),
                 kind: RelationKind::BlockedBy,
             },
         ];
         let dag = Dag::build(&issues, &relations);
         let levels = topological_levels(&dag).unwrap();
         assert_eq!(levels.len(), 3);
-        assert_eq!(levels[0], vec![1]);
-        assert_eq!(levels[1], vec![2]);
-        assert_eq!(levels[2], vec![3]);
+        assert_eq!(levels[0], ids(&[1]));
+        assert_eq!(levels[1], ids(&[2]));
+        assert_eq!(levels[2], ids(&[3]));
     }
 
     fn cycle_error_naming(groups: &str) -> String {
@@ -652,7 +658,11 @@ mod tests {
         let issues: Vec<Issue> = (1..=4).map(make_issue).collect();
         let mut dag = Dag::build(&issues, &[]);
         for blocked in [3, 2] {
-            dag.nodes.get_mut(&blocked).unwrap().reverse.insert(1);
+            dag.nodes
+                .get_mut(&IssueId(blocked))
+                .unwrap()
+                .reverse
+                .insert(IssueId(1));
         }
 
         assert_eq!(
@@ -666,7 +676,11 @@ mod tests {
     fn inconsistent_graph_error_has_no_hint() {
         let issues: Vec<Issue> = (1..=2).map(make_issue).collect();
         let mut dag = Dag::build(&issues, &[]);
-        dag.nodes.get_mut(&2).unwrap().reverse.insert(1);
+        dag.nodes
+            .get_mut(&IssueId(2))
+            .unwrap()
+            .reverse
+            .insert(IssueId(1));
 
         let message = topological_levels(&dag).unwrap_err().to_string();
         assert!(!message.contains("hint"), "{message}");
@@ -680,7 +694,11 @@ mod tests {
         // forward edge.
         let issues: Vec<Issue> = (1..=4).map(make_issue).collect();
         let mut dag = Dag::build(&issues, &[rel(1, 2), rel(2, 1)]);
-        dag.nodes.get_mut(&4).unwrap().reverse.insert(3);
+        dag.nodes
+            .get_mut(&IssueId(4))
+            .unwrap()
+            .reverse
+            .insert(IssueId(3));
 
         assert_eq!(
             topological_levels(&dag).unwrap_err().to_string(),
@@ -693,7 +711,11 @@ mod tests {
         // 1 ⇄ 2, with 2 also recording a blocked issue that is not a node.
         let issues: Vec<Issue> = (1..=2).map(make_issue).collect();
         let mut dag = Dag::build(&issues, &[rel(1, 2), rel(2, 1)]);
-        dag.nodes.get_mut(&2).unwrap().forward.insert(99);
+        dag.nodes
+            .get_mut(&IssueId(2))
+            .unwrap()
+            .forward
+            .insert(IssueId(99));
 
         assert_eq!(
             topological_levels(&dag).unwrap_err().to_string(),

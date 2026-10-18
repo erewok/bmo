@@ -1,7 +1,8 @@
 use clap::Args;
 
+use crate::cli::open_descendant_ids;
 use crate::db::{Repository, find_db, open_db};
-use crate::model::IssueFilter;
+use crate::model::{IssueFilter, IssueId};
 use crate::output::{OutputMode, make_printer};
 use crate::planner::dag::{Dag, find_ready};
 use crate::planner::topo::topological_levels;
@@ -11,6 +12,11 @@ pub struct NextArgs {
     /// Filter by assignee
     #[arg(short, long)]
     pub assignee: Option<String>,
+
+    /// Only show descendants of this issue: children, their children, and so on (e.g. 5 or BMO-5)
+    #[arg(long)]
+    pub parent: Option<IssueId>,
+
     /// Maximum number of results
     #[arg(long, default_value = "10")]
     pub limit: usize,
@@ -25,13 +31,21 @@ pub fn run(args: &NextArgs, json: bool, db: Option<String>) -> anyhow::Result<()
         OutputMode::Human
     });
 
+    // Build the graph from every open issue, even if `--parent` narrows the
+    // output. A descendant's blocker may live outside the parent, and
+    // readiness depends on it.
     let all_issues = repo.list_issues(IssueFilter::default())?;
     let all_relations = repo.list_all_relations()?;
 
     let dag = Dag::build(&all_issues, &all_relations);
     topological_levels(&dag)?;
+    let scope = args
+        .parent
+        .map(|parent| open_descendant_ids(&repo, parent))
+        .transpose()?;
     let ready: Vec<_> = find_ready(&dag)
         .into_iter()
+        .filter(|i| scope.as_ref().is_none_or(|ids| ids.contains(&i.id)))
         .filter(|i| {
             args.assignee
                 .as_ref()

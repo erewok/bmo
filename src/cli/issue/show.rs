@@ -1,14 +1,14 @@
 use clap::Args;
 
-use crate::cli::parse_id;
 use crate::db::{Repository, find_db, open_db};
 use crate::errors::ErrorCode;
+use crate::model::IssueId;
 use crate::output::{IssueDetail, OutputMode, make_printer};
 
 #[derive(Args)]
 pub struct ShowArgs {
     /// Issue ID (e.g. 1 or BMO-1)
-    pub id: String,
+    pub id: IssueId,
 }
 
 pub fn run(args: &ShowArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
@@ -20,7 +20,7 @@ pub fn run(args: &ShowArgs, json: bool, db: Option<String>) -> anyhow::Result<()
         OutputMode::Human
     });
 
-    let id = parse_id(&args.id)?;
+    let id = args.id;
     let issue = repo
         .get_issue(id)?
         .ok_or_else(|| anyhow::anyhow!("issue {} not found", args.id));

@@ -1,13 +1,13 @@
 use clap::Args;
 
-use crate::cli::parse_id;
 use crate::db::{ClaimIssueInput, Repository, find_db, open_db};
 use crate::errors::{BmoError, ErrorCode};
+use crate::model::IssueId;
 
 #[derive(Args)]
 pub struct ClaimArgs {
     /// Issue ID (e.g. 7 or BMO-7)
-    pub id: String,
+    pub id: IssueId,
     /// Assignee name to record on the issue
     #[arg(short, long)]
     pub assignee: Option<String>,
@@ -17,7 +17,7 @@ pub fn run(args: &ClaimArgs, json: bool, db: Option<String>) -> anyhow::Result<(
     let db_path = find_db(db.as_deref())?;
     let repo = open_db(&db_path)?;
 
-    let issue_id = parse_id(&args.id)?;
+    let issue_id = args.id;
 
     match repo.claim_issue(&ClaimIssueInput {
         issue_id,
@@ -43,7 +43,7 @@ pub fn run(args: &ClaimArgs, json: bool, db: Option<String>) -> anyhow::Result<(
                 for conflict in &file_conflicts {
                     for ci in &conflict.conflicts_with {
                         println!(
-                            "Warning: file conflict on {} with BMO-{} ({})",
+                            "Warning: file conflict on {} with {} ({})",
                             conflict.file, ci.id, ci.title
                         );
                     }
@@ -53,7 +53,7 @@ pub fn run(args: &ClaimArgs, json: bool, db: Option<String>) -> anyhow::Result<(
         }
         Err(e) => {
             if let Some(BmoError::Conflict(_)) = e.downcast_ref::<BmoError>() {
-                let msg = format!("BMO-{} is already in-progress", issue_id);
+                let msg = format!("{issue_id} is already in-progress");
                 if json {
                     let out = serde_json::json!({
                         "ok": false,

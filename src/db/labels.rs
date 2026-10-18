@@ -2,7 +2,7 @@ use sea_query::{Expr, ExprTrait, OnConflict, Order, Query, SqliteQueryBuilder};
 use sea_query_rusqlite::{RusqliteBinder, rusqlite};
 
 use crate::model::issue::IssueLabelIden;
-use crate::model::{Label, LabelIden};
+use crate::model::{IssueId, Label, LabelIden};
 
 use super::SqliteRepository;
 
@@ -54,7 +54,7 @@ impl SqliteRepository {
 
     pub(crate) fn add_label_to_issue_impl(
         &self,
-        issue_id: i64,
+        issue_id: IssueId,
         label_id: i64,
     ) -> anyhow::Result<()> {
         let (sql, values) = Query::insert()
@@ -71,7 +71,7 @@ impl SqliteRepository {
 
     pub(crate) fn remove_label_from_issue_impl(
         &self,
-        issue_id: i64,
+        issue_id: IssueId,
         label_name: &str,
     ) -> anyhow::Result<()> {
         // Subquery: SELECT id FROM labels WHERE name = ?
@@ -92,7 +92,7 @@ impl SqliteRepository {
         Ok(())
     }
 
-    pub(crate) fn list_issue_labels_impl(&self, issue_id: i64) -> anyhow::Result<Vec<Label>> {
+    pub(crate) fn list_issue_labels_impl(&self, issue_id: IssueId) -> anyhow::Result<Vec<Label>> {
         // SELECT l.id, l.name, l.color
         // FROM labels l
         // JOIN issue_labels il ON il.label_id = l.id

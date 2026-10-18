@@ -61,13 +61,13 @@ mod tests {
 
     use crate::db::{ClaimIssueInput, CreateIssueInput, SqliteRepository, open_db};
     use crate::errors::BmoError;
-    use crate::model::{Kind, Priority, Status};
+    use crate::model::{IssueId, Kind, Priority, Status};
 
     fn make_repo_in_memory() -> SqliteRepository {
         SqliteRepository::open_in_memory().expect("in-memory db")
     }
 
-    fn create_todo_issue(repo: &SqliteRepository) -> i64 {
+    fn create_todo_issue(repo: &SqliteRepository) -> IssueId {
         let issue = repo
             .create_issue_impl(&CreateIssueInput {
                 parent_id: None,
@@ -135,7 +135,7 @@ mod tests {
 
         let err = repo
             .claim_issue_impl(&ClaimIssueInput {
-                issue_id: 99999,
+                issue_id: IssueId(99999),
                 assignee: None,
             })
             .expect_err("claim of nonexistent issue should fail");

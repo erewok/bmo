@@ -1,15 +1,14 @@
 use clap::Args;
 
-use crate::cli::parse_id;
 use crate::db::{Repository, UpdateIssueInput, find_db, open_db};
 use crate::errors::{BmoError, ErrorCode};
-use crate::model::{Kind, Priority, Status};
+use crate::model::{IssueId, Kind, Priority, Status};
 use crate::output::{OutputMode, make_printer};
 
 #[derive(Args)]
 pub struct EditArgs {
     /// Issue ID
-    pub id: String,
+    pub id: IssueId,
     #[arg(short, long)]
     pub title: Option<String>,
     #[arg(short, long)]
@@ -23,7 +22,7 @@ pub struct EditArgs {
     #[arg(short, long)]
     pub assignee: Option<String>,
     #[arg(long)]
-    pub parent: Option<String>,
+    pub parent: Option<IssueId>,
 }
 
 pub fn run(args: &EditArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
@@ -35,7 +34,7 @@ pub fn run(args: &EditArgs, json: bool, db: Option<String>) -> anyhow::Result<()
         OutputMode::Human
     });
 
-    let id = parse_id(&args.id)?;
+    let id = args.id;
 
     let status = args
         .status
@@ -52,7 +51,7 @@ pub fn run(args: &EditArgs, json: bool, db: Option<String>) -> anyhow::Result<()
         .as_deref()
         .map(|k| k.parse::<Kind>())
         .transpose()?;
-    let parent_id = args.parent.as_deref().map(parse_id).transpose()?.map(Some);
+    let parent_id = args.parent.map(Some);
 
     let input = UpdateIssueInput {
         title: args.title.clone(),

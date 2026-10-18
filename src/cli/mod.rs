@@ -1,4 +1,9 @@
+use std::collections::HashSet;
+
 use clap::{ArgAction, Parser, Subcommand};
+
+use crate::db::Repository;
+use crate::model::{IssueFilter, IssueId};
 
 pub mod agent_init;
 pub mod board;
@@ -113,16 +118,14 @@ pub enum Commands {
     Issue(issue::IssueCommands),
 }
 
-/// Parse an issue ID that may be in "42" or "BMO-42" format.
-#[allow(dead_code)]
-pub fn parse_id(s: &str) -> anyhow::Result<i64> {
-    let stripped = s
-        .trim()
-        .to_uppercase()
-        .strip_prefix("BMO-")
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| s.trim().to_string());
-    stripped
-        .parse::<i64>()
-        .map_err(|_| anyhow::anyhow!("invalid issue ID: {s}"))
+/// Ids of the open issues below `ancestor` in the parent hierarchy, at any depth.
+pub fn open_descendant_ids(
+    repo: &impl Repository,
+    ancestor: IssueId,
+) -> anyhow::Result<HashSet<IssueId>> {
+    let descendants = repo.list_issues(IssueFilter {
+        descendant_of: Some(ancestor),
+        ..Default::default()
+    })?;
+    Ok(descendants.iter().map(|issue| issue.id).collect())
 }

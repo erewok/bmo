@@ -5,7 +5,7 @@ use sea_query_rusqlite::rusqlite::{Transaction, TransactionBehavior};
 use sea_query_rusqlite::{RusqliteBinder, rusqlite};
 
 use crate::errors::BmoError;
-use crate::model::{Relation, RelationIden, RelationKind};
+use crate::model::{IssueId, Relation, RelationIden, RelationKind};
 
 use super::SqliteRepository;
 
@@ -29,7 +29,7 @@ impl SqliteRepository {
     ///
     /// Uses per-node DB queries during BFS so only traversed edges are loaded, keeping
     /// each `add_relation_impl` call efficient even as the graph grows.
-    fn can_reach_impl(&self, start: i64, target: i64) -> anyhow::Result<bool> {
+    fn can_reach_impl(&self, start: IssueId, target: IssueId) -> anyhow::Result<bool> {
         if start == target {
             return Ok(true);
         }
@@ -72,8 +72,8 @@ impl SqliteRepository {
 
             let mut stmt = self.conn.prepare_cached(sql.as_str())?;
             let rows = stmt.query_map(&*values.as_params(), |r| {
-                let from_id: i64 = r.get(0)?;
-                let to_id: i64 = r.get(1)?;
+                let from_id: IssueId = r.get(0)?;
+                let to_id: IssueId = r.get(1)?;
                 let kind_str: String = r.get(2)?;
                 Ok((from_id, to_id, kind_str))
             })?;
@@ -106,9 +106,9 @@ impl SqliteRepository {
 
     pub(crate) fn add_relation_impl(
         &self,
-        from_id: i64,
+        from_id: IssueId,
         kind: RelationKind,
-        to_id: i64,
+        to_id: IssueId,
     ) -> anyhow::Result<Relation> {
         if from_id == to_id {
             return Err(BmoError::Validation("Cannot link an issue to itself".into()).into());
@@ -186,7 +186,7 @@ impl SqliteRepository {
         Ok(())
     }
 
-    pub(crate) fn list_relations_impl(&self, issue_id: i64) -> anyhow::Result<Vec<Relation>> {
+    pub(crate) fn list_relations_impl(&self, issue_id: IssueId) -> anyhow::Result<Vec<Relation>> {
         let (query, values) = Query::select()
             .columns([RelationIden::Id, RelationIden::FromId, RelationIden::ToId])
             .column(relation_col())
@@ -203,8 +203,8 @@ impl SqliteRepository {
             let kind_str: String = r.get(3)?;
             Ok((
                 r.get::<_, i64>(0)?,
-                r.get::<_, i64>(1)?,
-                r.get::<_, i64>(2)?,
+                r.get::<_, IssueId>(1)?,
+                r.get::<_, IssueId>(2)?,
                 kind_str,
             ))
         })?;
@@ -235,8 +235,8 @@ impl SqliteRepository {
             let kind_str: String = r.get(3)?;
             Ok((
                 r.get::<_, i64>(0)?,
-                r.get::<_, i64>(1)?,
-                r.get::<_, i64>(2)?,
+                r.get::<_, IssueId>(1)?,
+                r.get::<_, IssueId>(2)?,
                 kind_str,
             ))
         })?;
@@ -265,7 +265,7 @@ mod tests {
 
     use super::super::{CreateIssueInput, SqliteRepository, open_db};
     use crate::errors::BmoError;
-    use crate::model::{Kind, Priority, RelationKind, Status};
+    use crate::model::{IssueId, Kind, Priority, RelationKind, Status};
 
     const ALL_KINDS: [RelationKind; 7] = [
         RelationKind::Blocks,
@@ -277,7 +277,7 @@ mod tests {
         RelationKind::DuplicateOf,
     ];
 
-    fn create_issue(repo: &SqliteRepository) -> i64 {
+    fn create_issue(repo: &SqliteRepository) -> IssueId {
         repo.create_issue_impl(&CreateIssueInput {
             parent_id: None,
             title: "issue".to_string(),

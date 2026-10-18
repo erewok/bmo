@@ -1,9 +1,8 @@
 use clap::{Args, Subcommand};
 
-use crate::cli::parse_id;
 use crate::db::{Repository, find_db, open_db};
 use crate::errors::{BmoError, ErrorCode};
-use crate::model::RelationKind;
+use crate::model::{IssueId, RelationKind};
 use crate::output::{OutputMode, make_printer};
 
 #[derive(Subcommand)]
@@ -19,11 +18,11 @@ pub enum LinkCommands {
 #[derive(Args)]
 pub struct AddArgs {
     /// Source issue ID
-    pub from_id: String,
+    pub from_id: IssueId,
     /// Relation type (blocks, blocked-by, depends-on, dependency-of, relates-to, duplicates, duplicate-of)
     pub relation: String,
     /// Target issue ID
-    pub to_id: String,
+    pub to_id: IssueId,
 }
 
 #[derive(Args)]
@@ -35,15 +34,15 @@ pub struct RemoveArgs {
 #[derive(Args)]
 pub struct ListArgs {
     /// Issue ID
-    pub id: String,
+    pub id: IssueId,
 }
 
 pub fn run_add(args: &AddArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
     let db_path = find_db(db.as_deref())?;
     let repo = open_db(&db_path)?;
 
-    let from_id = parse_id(&args.from_id)?;
-    let to_id = parse_id(&args.to_id)?;
+    let from_id = args.from_id;
+    let to_id = args.to_id;
     let kind: RelationKind = args.relation.parse()?;
 
     let relation = match repo.add_relation(from_id, kind, to_id) {
@@ -63,10 +62,10 @@ pub fn run_add(args: &AddArgs, json: bool, db: Option<String>) -> anyhow::Result
     };
 
     if json {
-        let envelope = serde_json::json!({ "ok": true, "data": relation, "message": format!("Linked BMO-{from_id} {kind} BMO-{to_id}") });
+        let envelope = serde_json::json!({ "ok": true, "data": relation, "message": format!("Linked {from_id} {kind} {to_id}") });
         println!("{}", serde_json::to_string_pretty(&envelope)?);
     } else {
-        println!("Linked BMO-{from_id} {kind} BMO-{to_id}");
+        println!("Linked {from_id} {kind} {to_id}");
     }
     Ok(())
 }
@@ -95,7 +94,7 @@ pub fn run_list(args: &ListArgs, json: bool, db: Option<String>) -> anyhow::Resu
         OutputMode::Human
     });
 
-    let issue_id = parse_id(&args.id)?;
+    let issue_id = args.id;
     let relations = repo.list_relations(issue_id)?;
     printer.print_relations(&relations);
     Ok(())

@@ -10,14 +10,91 @@ use std::str::FromStr;
 
 use super::label::LabelIden;
 
+// ── IssueId ───────────────────────────────────────────────────────────────────
+
+/// The identity of an issue: its integer row id.
+///
+/// Graph relations, filters and lookups compare the `i64`. Only `Display`
+/// writes the `BMO-N` form, and `FromStr` accepts both `N` and `BMO-N`.
+/// JSON serializes an `IssueId` as a bare integer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct IssueId(pub i64);
+
+impl IssueId {
+    pub fn as_i64(self) -> i64 {
+        self.0
+    }
+}
+
+impl From<i64> for IssueId {
+    fn from(id: i64) -> Self {
+        IssueId(id)
+    }
+}
+
+impl From<IssueId> for i64 {
+    fn from(id: IssueId) -> Self {
+        id.0
+    }
+}
+
+impl fmt::Display for IssueId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "BMO-{}", self.0)
+    }
+}
+
+impl FromStr for IssueId {
+    type Err = anyhow::Error;
+
+    /// Parse an issue ID written as `42`, `BMO-42` or `bmo-42`.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let trimmed = s.trim();
+        let number = trimmed
+            .get(..4)
+            .filter(|prefix| prefix.eq_ignore_ascii_case("BMO-"))
+            .map_or(trimmed, |_| &trimmed[4..]);
+        number
+            .parse::<i64>()
+            .map(IssueId)
+            .map_err(|_| anyhow::anyhow!("invalid issue ID: {s}"))
+    }
+}
+
+impl From<IssueId> for sea_query::Value {
+    fn from(id: IssueId) -> Self {
+        id.0.into()
+    }
+}
+
+/// Lets sea-query bind `Option<IssueId>` as a nullable integer column.
+impl sea_query::Nullable for IssueId {
+    fn null() -> sea_query::Value {
+        i64::null()
+    }
+}
+
+impl rusqlite::types::ToSql for IssueId {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        self.0.to_sql()
+    }
+}
+
+impl rusqlite::types::FromSql for IssueId {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        i64::column_result(value).map(IssueId)
+    }
+}
+
 /// A single tracked work item.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[enum_def(table_name = "issues")] // Generate IssueIden for use in sea-query
 pub struct Issue {
     /// Auto-assigned numeric identifier.
-    pub id: i64,
+    pub id: IssueId,
     /// Parent issue id, if this is a sub-issue.
-    pub parent_id: Option<i64>,
+    pub parent_id: Option<IssueId>,
     pub title: String,
     pub description: String,
     pub status: Status,
@@ -34,7 +111,7 @@ pub struct Issue {
 
 impl Issue {
     pub fn display_id(&self) -> String {
-        format!("BMO-{}", self.id)
+        self.id.to_string()
     }
 }
 
@@ -42,7 +119,7 @@ impl Issue {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[enum_def(table_name = "issue_labels")] // Generate IssueLabelIden for use in sea-query
 pub struct IssueLabel {
-    pub issue_id: i64,
+    pub issue_id: IssueId,
     pub label_id: i64,
 }
 
@@ -311,7 +388,9 @@ pub struct IssueFilter {
     pub kind: Option<Vec<Kind>>,
     pub assignee: Option<String>,
     pub labels: Option<Vec<String>>,
-    pub parent_id: Option<i64>,
+    /// Matches every issue below this one in the parent hierarchy: its
+    /// children, their children, and so on.
+    pub descendant_of: Option<IssueId>,
     pub search: Option<String>,
     pub limit: Option<usize>,
     pub offset: Option<usize>,
@@ -322,6 +401,27 @@ pub struct IssueFilter {
     pub include_done: bool,
     // short-circuit everything above and select all issues.
     pub findall: bool,
+}
+
+/// A predicate on `issues.id` that holds for every descendant of `ancestor`.
+///
+/// The recursive CTE walks `parent_id` links over all issues, whatever their
+/// status, so a done sub-epic still connects its open children to `ancestor`.
+/// `UNION` drops repeated rows, which ends the walk even if the stored data
+/// holds a parent cycle.
+fn descendant_of_predicate(ancestor: IssueId) -> Expr {
+    Expr::cust_with_values(
+        r#""issues"."id" IN (
+            WITH RECURSIVE descendants(id) AS (
+                SELECT id FROM issues WHERE parent_id = ?
+                UNION
+                SELECT child.id FROM issues AS child
+                JOIN descendants ON child.parent_id = descendants.id
+            )
+            SELECT id FROM descendants
+        )"#,
+        [ancestor],
+    )
 }
 
 impl IssueFilter {
@@ -393,8 +493,8 @@ impl IssueFilter {
             query.apply_if(self.assignee.take(), |q, v| {
                 q.and_where(Expr::col(IssueIden::Assignee).eq(v.as_str()));
             });
-            query.apply_if(self.parent_id.take(), |q, v| {
-                q.and_where(Expr::col(IssueIden::ParentId).eq(v));
+            query.apply_if(self.descendant_of.take(), |q, v| {
+                q.and_where(descendant_of_predicate(v));
             });
             query.apply_if(self.search.take(), |q, v| {
                 q.cond_where(
@@ -491,10 +591,35 @@ mod tests {
     }
 
     #[test]
+    fn issue_id_parses_bare_and_prefixed_forms() {
+        for input in ["42", "BMO-42", "bmo-42", "Bmo-42", "  BMO-42 "] {
+            assert_eq!(input.parse::<IssueId>().unwrap(), IssueId(42), "{input:?}");
+        }
+    }
+
+    #[test]
+    fn issue_id_rejects_malformed_input() {
+        for input in ["", "BMO-", "BMO-x", "ABC-42", "42x", "BMO42"] {
+            assert!(input.parse::<IssueId>().is_err(), "{input:?}");
+        }
+    }
+
+    #[test]
+    fn issue_id_displays_with_prefix_and_serializes_as_integer() {
+        let id = IssueId(7);
+        assert_eq!(id.to_string(), "BMO-7");
+        assert_eq!(serde_json::to_value(id).unwrap(), serde_json::json!(7));
+        assert_eq!(
+            serde_json::from_value::<IssueId>(serde_json::json!(7)).unwrap(),
+            id
+        );
+    }
+
+    #[test]
     fn display_id() {
         use chrono::Utc;
         let issue = Issue {
-            id: 42,
+            id: IssueId(42),
             parent_id: None,
             title: "test".into(),
             description: "".into(),

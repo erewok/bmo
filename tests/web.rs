@@ -4,7 +4,7 @@ use tempfile::TempDir;
 use tower::ServiceExt;
 
 use bmo::db::{CreateIssueInput, Repository, open_db};
-use bmo::model::{Kind, Priority, RelationKind, Status};
+use bmo::model::{IssueId, Kind, Priority, RelationKind, Status};
 use bmo::web::{build_router, test_state};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -41,7 +41,7 @@ fn create_test_issue(dir: &TempDir) -> i64 {
             actor: None,
         })
         .unwrap();
-    issue.id
+    issue.id.as_i64()
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -219,7 +219,7 @@ async fn issue_detail_page_renders_markdown() {
     let response = app
         .oneshot(
             Request::builder()
-                .uri(format!("/issues/{}", issue.id))
+                .uri(format!("/issues/{}", issue.id.as_i64()))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -295,7 +295,7 @@ async fn issue_detail_page_on_the_to_side_links_the_other_issue_with_the_inverte
         let shown_id = create_test_issue(&dir);
         open_db(&dir.path().join("issues.db"))
             .unwrap()
-            .add_relation(from_id, stored_kind, shown_id)
+            .add_relation(IssueId(from_id), stored_kind, IssueId(shown_id))
             .unwrap();
 
         let list = relation_list_html(app, shown_id).await;
@@ -324,9 +324,9 @@ async fn issue_detail_page_renders_each_relation_from_the_shown_issue() {
     let second = create_test_issue(&dir);
     let third = create_test_issue(&dir);
     let repo = open_db(&dir.path().join("issues.db")).unwrap();
-    repo.add_relation(first, RelationKind::Blocks, second)
+    repo.add_relation(IssueId(first), RelationKind::Blocks, IssueId(second))
         .unwrap();
-    repo.add_relation(third, RelationKind::BlockedBy, second)
+    repo.add_relation(IssueId(third), RelationKind::BlockedBy, IssueId(second))
         .unwrap();
 
     let blocked_by_first = format!(r#"← blocked by <a href="/issues/{first}">BMO-{first}</a>"#);

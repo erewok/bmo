@@ -3,7 +3,8 @@ use sea_query_rusqlite::{RusqliteBinder, rusqlite};
 
 use crate::model::activity::NewActivityEntry;
 use crate::model::{
-    ActivityEntry, Comment, Issue, IssueFile, IssueFilter, Label, Relation, RelationKind, Status,
+    ActivityEntry, Comment, Issue, IssueFile, IssueFilter, IssueId, Label, Relation, RelationKind,
+    Status,
 };
 
 use super::{
@@ -23,7 +24,7 @@ impl Repository for SqliteRepository {
         self.create_issue_impl(input)
     }
 
-    fn get_issue(&self, id: i64) -> anyhow::Result<Option<Issue>> {
+    fn get_issue(&self, id: IssueId) -> anyhow::Result<Option<Issue>> {
         self.get_issue_impl(id)
     }
 
@@ -35,11 +36,11 @@ impl Repository for SqliteRepository {
         self.count_issues_impl(filter)
     }
 
-    fn update_issue(&self, id: i64, input: &UpdateIssueInput) -> anyhow::Result<Issue> {
+    fn update_issue(&self, id: IssueId, input: &UpdateIssueInput) -> anyhow::Result<Issue> {
         self.update_issue_impl(id, input)
     }
 
-    fn delete_issue(&self, id: i64) -> anyhow::Result<()> {
+    fn delete_issue(&self, id: IssueId) -> anyhow::Result<()> {
         self.delete_issue_impl(id)
     }
 
@@ -51,7 +52,7 @@ impl Repository for SqliteRepository {
         self.truncate_all_issues_impl()
     }
 
-    fn get_sub_issues(&self, parent_id: i64) -> anyhow::Result<Vec<Issue>> {
+    fn get_sub_issues(&self, parent_id: IssueId) -> anyhow::Result<Vec<Issue>> {
         self.get_sub_issues_impl(parent_id)
     }
 
@@ -59,7 +60,7 @@ impl Repository for SqliteRepository {
         self.add_comment_impl(input)
     }
 
-    fn list_comments(&self, issue_id: i64) -> anyhow::Result<Vec<Comment>> {
+    fn list_comments(&self, issue_id: IssueId) -> anyhow::Result<Vec<Comment>> {
         self.list_comments_impl(issue_id)
     }
 
@@ -67,15 +68,15 @@ impl Repository for SqliteRepository {
         self.get_or_create_label_impl(name, color)
     }
 
-    fn add_label_to_issue(&self, issue_id: i64, label_id: i64) -> anyhow::Result<()> {
+    fn add_label_to_issue(&self, issue_id: IssueId, label_id: i64) -> anyhow::Result<()> {
         self.add_label_to_issue_impl(issue_id, label_id)
     }
 
-    fn remove_label_from_issue(&self, issue_id: i64, label_name: &str) -> anyhow::Result<()> {
+    fn remove_label_from_issue(&self, issue_id: IssueId, label_name: &str) -> anyhow::Result<()> {
         self.remove_label_from_issue_impl(issue_id, label_name)
     }
 
-    fn list_issue_labels(&self, issue_id: i64) -> anyhow::Result<Vec<Label>> {
+    fn list_issue_labels(&self, issue_id: IssueId) -> anyhow::Result<Vec<Label>> {
         self.list_issue_labels_impl(issue_id)
     }
 
@@ -89,9 +90,9 @@ impl Repository for SqliteRepository {
 
     fn add_relation(
         &self,
-        from_id: i64,
+        from_id: IssueId,
         kind: RelationKind,
-        to_id: i64,
+        to_id: IssueId,
     ) -> anyhow::Result<Relation> {
         self.add_relation_impl(from_id, kind, to_id)
     }
@@ -100,7 +101,7 @@ impl Repository for SqliteRepository {
         self.remove_relation_impl(relation_id)
     }
 
-    fn list_relations(&self, issue_id: i64) -> anyhow::Result<Vec<Relation>> {
+    fn list_relations(&self, issue_id: IssueId) -> anyhow::Result<Vec<Relation>> {
         self.list_relations_impl(issue_id)
     }
 
@@ -112,25 +113,25 @@ impl Repository for SqliteRepository {
         self.log_activity_impl(entry)
     }
 
-    fn list_activity(&self, issue_id: i64, limit: usize) -> anyhow::Result<Vec<ActivityEntry>> {
+    fn list_activity(&self, issue_id: IssueId, limit: usize) -> anyhow::Result<Vec<ActivityEntry>> {
         self.list_activity_impl(issue_id, limit)
     }
 
-    fn add_file(&self, issue_id: i64, path: &str) -> anyhow::Result<IssueFile> {
+    fn add_file(&self, issue_id: IssueId, path: &str) -> anyhow::Result<IssueFile> {
         self.add_file_impl(issue_id, path)
     }
 
-    fn remove_file(&self, issue_id: i64, path: &str) -> anyhow::Result<()> {
+    fn remove_file(&self, issue_id: IssueId, path: &str) -> anyhow::Result<()> {
         self.remove_file_impl(issue_id, path)
     }
 
-    fn list_files(&self, issue_id: i64) -> anyhow::Result<Vec<IssueFile>> {
+    fn list_files(&self, issue_id: IssueId) -> anyhow::Result<Vec<IssueFile>> {
         self.list_files_impl(issue_id)
     }
 
     fn list_file_conflicts(
         &self,
-        issue_id: i64,
+        issue_id: IssueId,
     ) -> anyhow::Result<Vec<crate::model::FileConflict>> {
         self.list_file_conflicts_impl(issue_id)
     }

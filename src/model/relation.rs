@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 
+use super::IssueId;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum RelationKind {
@@ -85,8 +87,8 @@ impl FromStr for RelationKind {
 #[enum_def(table_name = "issue_relations")] // Generate RelationIden for use in sea-query
 pub struct Relation {
     pub id: i64,
-    pub from_id: i64,
-    pub to_id: i64,
+    pub from_id: IssueId,
+    pub to_id: IssueId,
     pub kind: RelationKind,
 }
 
@@ -94,7 +96,7 @@ pub struct Relation {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct RelationView {
     pub kind: RelationKind,
-    pub other_id: i64,
+    pub other_id: IssueId,
     /// True for a relation of an issue to itself. `link add` rejects these,
     /// but older databases or direct SQL writes can still hold them.
     pub self_link: bool,
@@ -111,7 +113,7 @@ pub struct IssueRelation {
 impl Relation {
     /// Describes this relation from the point of view of `issue_id`: the kind
     /// that issue has towards the issue at the other endpoint.
-    pub fn viewed_from(&self, issue_id: i64) -> RelationView {
+    pub fn viewed_from(&self, issue_id: IssueId) -> RelationView {
         let self_link = self.from_id == self.to_id;
         if issue_id == self.to_id && !self_link {
             RelationView {
@@ -129,7 +131,7 @@ impl Relation {
     }
 
     /// Pairs this relation with its view from `issue_id`.
-    pub fn with_view_from(self, issue_id: i64) -> IssueRelation {
+    pub fn with_view_from(self, issue_id: IssueId) -> IssueRelation {
         let view = self.viewed_from(issue_id);
         IssueRelation {
             relation: self,
@@ -155,8 +157,8 @@ mod tests {
     fn relation(from_id: i64, kind: RelationKind, to_id: i64) -> Relation {
         Relation {
             id: 1,
-            from_id,
-            to_id,
+            from_id: IssueId(from_id),
+            to_id: IssueId(to_id),
             kind,
         }
     }
@@ -165,10 +167,10 @@ mod tests {
     fn viewed_from_the_from_side_keeps_stored_kind_and_names_to_id() {
         for kind in ALL_KINDS {
             assert_eq!(
-                relation(1, kind, 2).viewed_from(1),
+                relation(1, kind, 2).viewed_from(IssueId(1)),
                 RelationView {
                     kind,
-                    other_id: 2,
+                    other_id: IssueId(2),
                     self_link: false
                 },
                 "from side of {kind}"
@@ -189,10 +191,10 @@ mod tests {
         ];
         for (stored, seen) in expected {
             assert_eq!(
-                relation(1, stored, 2).viewed_from(2),
+                relation(1, stored, 2).viewed_from(IssueId(2)),
                 RelationView {
                     kind: seen,
-                    other_id: 1,
+                    other_id: IssueId(1),
                     self_link: false
                 },
                 "to side of {stored}"
@@ -204,10 +206,10 @@ mod tests {
     fn viewed_from_a_self_relation_keeps_stored_kind_and_names_the_issue_itself() {
         for kind in ALL_KINDS {
             assert_eq!(
-                relation(5, kind, 5).viewed_from(5),
+                relation(5, kind, 5).viewed_from(IssueId(5)),
                 RelationView {
                     kind,
-                    other_id: 5,
+                    other_id: IssueId(5),
                     self_link: true
                 },
                 "self-relation of {kind}"
@@ -219,10 +221,10 @@ mod tests {
     fn viewed_from_an_issue_at_neither_endpoint_reads_as_the_from_side() {
         for kind in ALL_KINDS {
             assert_eq!(
-                relation(1, kind, 2).viewed_from(3),
+                relation(1, kind, 2).viewed_from(IssueId(3)),
                 RelationView {
                     kind,
-                    other_id: 2,
+                    other_id: IssueId(2),
                     self_link: false
                 },
                 "{kind} viewed from an unrelated issue"
@@ -232,7 +234,7 @@ mod tests {
 
     #[test]
     fn viewed_from_serialises_kind_as_kebab_case_label() {
-        let view = relation(1, RelationKind::Blocks, 2).viewed_from(2);
+        let view = relation(1, RelationKind::Blocks, 2).viewed_from(IssueId(2));
         assert_eq!(
             serde_json::to_value(view).unwrap(),
             serde_json::json!({"kind": "blocked-by", "other_id": 1, "self_link": false})
@@ -241,7 +243,7 @@ mod tests {
 
     #[test]
     fn with_view_from_serialises_the_stored_row_and_its_view() {
-        let shown = relation(1, RelationKind::Blocks, 2).with_view_from(2);
+        let shown = relation(1, RelationKind::Blocks, 2).with_view_from(IssueId(2));
         assert_eq!(
             serde_json::to_value(shown).unwrap(),
             serde_json::json!({

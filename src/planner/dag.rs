@@ -1,21 +1,21 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::model::{Issue, Relation, RelationKind, Status};
+use crate::model::{Issue, IssueId, Relation, RelationKind, Status};
 
 /// A node in the directed acyclic graph.
 #[derive(Debug)]
 pub struct DagNode {
     pub issue: Issue,
     /// IDs of issues that this issue blocks (i.e., this → those)
-    pub forward: HashSet<i64>,
+    pub forward: HashSet<IssueId>,
     /// IDs of issues that block this issue (i.e., those → this)
-    pub reverse: HashSet<i64>,
+    pub reverse: HashSet<IssueId>,
 }
 
 /// The full dependency DAG.
 #[derive(Debug)]
 pub struct Dag {
-    pub nodes: HashMap<i64, DagNode>,
+    pub nodes: HashMap<IssueId, DagNode>,
 }
 
 impl Dag {
@@ -29,7 +29,7 @@ impl Dag {
     /// declare the link. `RelatesTo`, `Duplicates`, and `DuplicateOf` are
     /// informational only and contribute no edge.
     pub fn build(issues: &[Issue], relations: &[Relation]) -> Self {
-        let mut nodes: HashMap<i64, DagNode> = issues
+        let mut nodes: HashMap<IssueId, DagNode> = issues
             .iter()
             .map(|i| {
                 (
@@ -80,9 +80,42 @@ impl Dag {
 
     /// True if the issue has no children in the parent-child hierarchy.
     /// We approximate this by checking if any other issue has this as parent_id.
-    pub fn is_leaf(&self, id: i64) -> bool {
+    pub fn is_leaf(&self, id: IssueId) -> bool {
         // Check if any issue in the DAG has this issue as parent
         !self.nodes.values().any(|n| n.issue.parent_id == Some(id))
+    }
+
+    /// Narrows the graph to the issues in `roots`, plus every issue that
+    /// blocks one of them directly or transitively.
+    ///
+    /// The graph keeps the outside blockers so that a plan for `roots` still
+    /// orders each issue after the work it waits on. If the graph dropped
+    /// them, a blocked issue would land in the first phase.
+    pub fn scoped_to(self, roots: &HashSet<IssueId>) -> Dag {
+        let mut keep: HashSet<IssueId> = HashSet::new();
+        let mut pending: Vec<IssueId> = roots
+            .iter()
+            .copied()
+            .filter(|id| self.nodes.contains_key(id))
+            .collect();
+        while let Some(id) = pending.pop() {
+            if keep.insert(id) {
+                pending.extend(self.nodes[&id].reverse.iter().copied());
+            }
+        }
+
+        // `keep` already holds every blocker of a kept node, so only
+        // `forward` can name an id outside the scoped graph.
+        let nodes = self
+            .nodes
+            .into_iter()
+            .filter(|(id, _)| keep.contains(id))
+            .map(|(id, mut node)| {
+                node.forward.retain(|blocked| keep.contains(blocked));
+                (id, node)
+            })
+            .collect();
+        Dag { nodes }
     }
 }
 
@@ -129,7 +162,7 @@ mod tests {
 
     fn make_issue(id: i64, status: Status, priority: Priority) -> Issue {
         Issue {
-            id,
+            id: IssueId(id),
             parent_id: None,
             title: format!("Issue {id}"),
             description: String::new(),
@@ -147,8 +180,8 @@ mod tests {
     fn make_relation(from_id: i64, to_id: i64, kind: RelationKind) -> Relation {
         Relation {
             id: 0,
-            from_id,
-            to_id,
+            from_id: IssueId(from_id),
+            to_id: IssueId(to_id),
             kind,
         }
     }
@@ -162,8 +195,8 @@ mod tests {
         let relations = vec![make_relation(1, 2, RelationKind::Blocks)];
         let dag = Dag::build(&issues, &relations);
 
-        assert!(dag.nodes[&1].forward.contains(&2));
-        assert!(dag.nodes[&2].reverse.contains(&1));
+        assert!(dag.nodes[&IssueId(1)].forward.contains(&IssueId(2)));
+        assert!(dag.nodes[&IssueId(2)].reverse.contains(&IssueId(1)));
     }
 
     #[test]
@@ -176,7 +209,7 @@ mod tests {
         let dag = Dag::build(&issues, &relations);
         let ready = find_ready(&dag);
         assert_eq!(ready.len(), 1);
-        assert_eq!(ready[0].id, 2);
+        assert_eq!(ready[0].id, IssueId(2));
     }
 
     // A relation whose other endpoint was filtered out of the issue list (a
@@ -200,8 +233,8 @@ mod tests {
         ];
         let dag = Dag::build(&issues, &relations);
 
-        assert!(dag.nodes[&1].forward.is_empty());
-        assert!(dag.nodes[&1].reverse.is_empty());
+        assert!(dag.nodes[&IssueId(1)].forward.is_empty());
+        assert!(dag.nodes[&IssueId(1)].reverse.is_empty());
     }
 
     // Every id reachable through `forward` or `reverse` must be a key in `nodes`.
@@ -234,7 +267,7 @@ mod tests {
         let dag = Dag::build(&issues, &relations);
         let ready = find_ready(&dag);
         // Issue 2 is blocked by issue 1 which is not done
-        assert!(ready.iter().all(|i| i.id != 2));
+        assert!(ready.iter().all(|i| i.id != IssueId(2)));
     }
 
     #[test]
@@ -248,8 +281,8 @@ mod tests {
         let relations = vec![make_relation(2, 1, RelationKind::BlockedBy)];
         let dag = Dag::build(&issues, &relations);
 
-        assert!(dag.nodes[&1].forward.contains(&2));
-        assert!(dag.nodes[&2].reverse.contains(&1));
+        assert!(dag.nodes[&IssueId(1)].forward.contains(&IssueId(2)));
+        assert!(dag.nodes[&IssueId(2)].reverse.contains(&IssueId(1)));
     }
 
     #[test]
@@ -264,10 +297,26 @@ mod tests {
         let dependency_of_dag =
             Dag::build(&issues, &[make_relation(1, 2, RelationKind::DependencyOf)]);
 
-        assert!(depends_on_dag.nodes[&1].forward.contains(&2));
-        assert!(depends_on_dag.nodes[&2].reverse.contains(&1));
-        assert!(dependency_of_dag.nodes[&1].forward.contains(&2));
-        assert!(dependency_of_dag.nodes[&2].reverse.contains(&1));
+        assert!(
+            depends_on_dag.nodes[&IssueId(1)]
+                .forward
+                .contains(&IssueId(2))
+        );
+        assert!(
+            depends_on_dag.nodes[&IssueId(2)]
+                .reverse
+                .contains(&IssueId(1))
+        );
+        assert!(
+            dependency_of_dag.nodes[&IssueId(1)]
+                .forward
+                .contains(&IssueId(2))
+        );
+        assert!(
+            dependency_of_dag.nodes[&IssueId(2)]
+                .reverse
+                .contains(&IssueId(1))
+        );
     }
 
     #[test]
@@ -282,7 +331,7 @@ mod tests {
         let dag = Dag::build(&issues, &relations);
         let ready = find_ready(&dag);
         // Issue 2 is blocked-by issue 1 which is not done
-        assert!(ready.iter().all(|i| i.id != 2));
+        assert!(ready.iter().all(|i| i.id != IssueId(2)));
     }
 
     #[test]
@@ -297,9 +346,35 @@ mod tests {
             make_relation(1, 2, RelationKind::DuplicateOf),
         ];
         let dag = Dag::build(&issues, &relations);
-        assert!(dag.nodes[&1].forward.is_empty());
-        assert!(dag.nodes[&1].reverse.is_empty());
-        assert!(dag.nodes[&2].forward.is_empty());
-        assert!(dag.nodes[&2].reverse.is_empty());
+        assert!(dag.nodes[&IssueId(1)].forward.is_empty());
+        assert!(dag.nodes[&IssueId(1)].reverse.is_empty());
+        assert!(dag.nodes[&IssueId(2)].forward.is_empty());
+        assert!(dag.nodes[&IssueId(2)].reverse.is_empty());
+    }
+
+    #[test]
+    fn scoped_to_keeps_transitive_outside_blockers() {
+        // The scope is 2 and 3. 5 blocks 4, which blocks 3.
+        // 3 blocks 6, which sits outside the scope. 7 is unrelated.
+        let issues: Vec<Issue> = (1..=7)
+            .map(|id| make_issue(id, Status::Todo, Priority::Medium))
+            .collect();
+        let relations = vec![
+            make_relation(5, 4, RelationKind::Blocks),
+            make_relation(4, 3, RelationKind::Blocks),
+            make_relation(3, 6, RelationKind::Blocks),
+        ];
+
+        let scope = HashSet::from([IssueId(2), IssueId(3)]);
+        let dag = Dag::build(&issues, &relations).scoped_to(&scope);
+
+        let mut kept: Vec<IssueId> = dag.nodes.keys().copied().collect();
+        kept.sort();
+        assert_eq!(kept, [2, 3, 4, 5].map(IssueId));
+        assert!(dag.nodes[&IssueId(3)].reverse.contains(&IssueId(4)));
+        assert!(dag.nodes[&IssueId(4)].reverse.contains(&IssueId(5)));
+        // The edge to the dropped issue 6 is gone, so the plan cannot
+        // reference a node that does not exist.
+        assert!(dag.nodes[&IssueId(3)].forward.is_empty());
     }
 }

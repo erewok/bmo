@@ -1,25 +1,24 @@
 use clap::Args;
 
-use crate::cli::parse_id;
 use crate::db::{Repository, UpdateIssueInput, find_db, open_db};
-use crate::model::Status;
+use crate::model::{IssueId, Status};
 use crate::output::{OutputMode, make_printer};
 
 #[derive(Args)]
 pub struct MoveArgs {
     /// Issue ID
-    pub id: String,
+    pub id: IssueId,
     /// New status
     #[arg(short, long)]
     pub status: String,
 }
 
 pub fn run(args: &MoveArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
-    run_move(&args.id, &args.status, json, db)
+    run_move(args.id, &args.status, json, db)
 }
 
 pub fn run_move(
-    id_str: &str,
+    id: IssueId,
     status_str: &str,
     json: bool,
     db: Option<String>,
@@ -32,7 +31,6 @@ pub fn run_move(
         OutputMode::Human
     });
 
-    let id = parse_id(id_str)?;
     let status: Status = status_str.parse()?;
 
     let input = UpdateIssueInput {

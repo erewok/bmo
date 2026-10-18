@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use crate::model::{IssueFilter, IssueFilterOrder, Kind, Priority, Status};
+use crate::model::{IssueFilter, IssueFilterOrder, IssueId, Kind, Priority, Status};
 
 /// Build an IssueFilter from CLI string arguments.
 #[derive(Debug, Default)]
@@ -10,7 +10,7 @@ pub struct FilterBuilder {
     pub kinds: Vec<String>,
     pub assignee: Option<String>,
     pub labels: Vec<String>,
-    pub parent_id: Option<String>,
+    pub descendant_of: Option<IssueId>,
     pub search: Option<String>,
     pub sort: Option<String>,
     pub limit: usize,
@@ -62,12 +62,6 @@ impl FilterBuilder {
             )
         };
 
-        let parent_id = self
-            .parent_id
-            .as_deref()
-            .map(crate::cli::parse_id)
-            .transpose()?;
-
         let labels = if self.labels.is_empty() {
             None
         } else {
@@ -81,7 +75,7 @@ impl FilterBuilder {
             assignee: self.assignee,
             labels,
             order_by,
-            parent_id,
+            descendant_of: self.descendant_of,
             search: self.search,
             limit: if self.limit == 0 {
                 None
