@@ -2,7 +2,7 @@
 //!
 //! `--parent` matches every descendant of the parent, at any depth.
 //!
-//! Every test runs against the same issue tree:
+//! Tests start with this issue tree:
 //!
 //! ```text
 //! BMO-1  epic
@@ -85,6 +85,59 @@ fn list_parent_returns_all_descendants_in_either_id_form() {
             BTreeSet::from([2, 3, 6, 7]),
             "--parent {parent}"
         );
+    }
+}
+
+#[test]
+fn parent_filters_accept_single_comma_separated_and_repeated_values() {
+    let dir = setup_epic_tree();
+    create(&dir, "Second tree child", &["--parent", "4"]);
+    create(&dir, "Third tree child", &["--parent", "5"]);
+    create(&dir, "Second tree grandchild", &["--parent", "8"]);
+
+    for command in ["list", "ls", "next", "plan", "board"] {
+        for (parents, multiple) in [
+            (vec!["--parent", "1"], false),
+            (vec!["--parent", "BMO-1"], false),
+            (vec!["--parent", "1,4,5"], true),
+            (vec!["--parent", "BMO-1,bmo-4,5"], true),
+            (vec!["--parent", "1", "--parent", "4,5"], true),
+            (vec!["--parent", "1,4,5,8,1,999"], true),
+        ] {
+            let mut args = vec![command];
+            args.extend(parents);
+            let data = json_data(&dir, &args);
+            let issues = match command {
+                "plan" => data["phases"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .flat_map(|phase| phase["issues"].as_array().unwrap().iter())
+                    .cloned()
+                    .collect::<Vec<_>>(),
+                "board" => ["backlog", "todo", "in_progress", "review", "done"]
+                    .iter()
+                    .flat_map(|column| data[column].as_array().unwrap().iter())
+                    .cloned()
+                    .collect(),
+                _ => data.as_array().unwrap().clone(),
+            };
+            let ids: Vec<i64> = issues
+                .iter()
+                .map(|issue| issue["id"].as_i64().unwrap())
+                .collect();
+            let unique: BTreeSet<i64> = ids.iter().copied().collect();
+            assert_eq!(ids.len(), unique.len(), "duplicate issues for {args:?}");
+            let expected = match (command, multiple) {
+                ("next", false) => BTreeSet::from([2, 7]),
+                ("next", true) => BTreeSet::from([2, 7, 9, 10]),
+                ("plan", false) => BTreeSet::from([2, 3, 4, 6, 7]),
+                ("plan", true) => BTreeSet::from([2, 3, 4, 6, 7, 8, 9, 10]),
+                (_, false) => BTreeSet::from([2, 3, 6, 7]),
+                (_, true) => BTreeSet::from([2, 3, 6, 7, 8, 9, 10]),
+            };
+            assert_eq!(unique, expected, "{args:?}");
+        }
     }
 }
 
@@ -201,9 +254,12 @@ fn board_label_filter_applies() {
 fn parent_rejects_a_malformed_id() {
     let dir = setup_epic_tree();
     for command in ["list", "next", "plan", "board"] {
-        bmo(&dir)
-            .args([command, "--parent", "BMO-x"])
-            .assert()
-            .failure();
+        for parent in ["BMO-x", "1,BMO-x", "BMO-x,1", "", "1,", ",1"] {
+            bmo(&dir)
+                .args([command, "--parent", parent])
+                .assert()
+                .failure()
+                .stderr(predicates::str::contains("invalid value"));
+        }
     }
 }

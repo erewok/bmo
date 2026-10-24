@@ -14,7 +14,7 @@ For an example of agents and skills that have been instructed to use `bmo` check
 
 `bmo` was inspired by and adapted from [docket](https://github.com/ALT-F4-LLC/docket), an issue tracker for AI agents written by **ALT-F4-LLC**.
 
-In addition, the code in this repository was written by [Claude Code](https://claude.ai/claude-code). The repo owner directed this work.
+In addition, the code in this repository was written by repo contributors with significant contributions from [Claude Code](https://claude.ai/claude-code).
 
 ## Installation
 
@@ -43,6 +43,16 @@ bmo list
 bmo board
 bmo web
 ```
+
+Combine filters with comma-separated values; alternatively, repeat the flag for each value:
+
+```bash
+bmo ls --parent 1,2,3 -k epic,bug
+```
+
+This lists descendants of any of those parents whose kind is epic or bug.
+See the [command reference](docs/commands.md#multi-value-options-and-filter-semantics)
+for supported options and matching rules.
 
 ## pi-code Integration
 
@@ -76,5 +86,3 @@ See [docs/pi-extension.md](docs/pi-extension.md) for the full integration guide.
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE) file.
-
-`bmo` was inspired by [docket](https://github.com/ALT-F4-LLC/docket) by **ALT-F4-LLC**. Please credit that project for the ideas in this project.

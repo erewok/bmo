@@ -8,8 +8,8 @@ use crate::model::{IssueFilter, Status};
 
 #[derive(Args)]
 pub struct TruncateArgs {
-    /// Delete issues with these statuses (repeatable; default: done)
-    #[arg(short, long, value_name = "STATUS")]
+    /// Delete issues matching any listed status (comma-separated values; alternatively, repeat the flag for each value; default: done)
+    #[arg(short, long, value_name = "STATUS", value_delimiter = ',')]
     pub status: Vec<String>,
 
     /// Delete ALL issues regardless of status (mutually exclusive with --status)

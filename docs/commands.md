@@ -56,6 +56,41 @@ These flags are accepted by every command.
 | `--json` | bool | false | Output all results as JSON using the standard envelope |
 | `--db <PATH>` | string | (auto-detected) | Override the database path. Also reads `BMO_DB` environment variable |
 
+## Multi-value Options and Filter Semantics
+
+The following options accept a single value or comma-separated values; alternatively, repeat
+the flag for each value. You can also mix comma-separated values and repeated flags:
+
+| Command | Multi-value options |
+|---------|---------------------|
+| `list` (including `ls` and `issue list`) | `--status`, `--priority`, `--kind`, `--label`, `--parent` |
+| `board` | `--priority`, `--label`, `--parent` |
+| `next`, `plan` | `--parent` |
+| `truncate` | `--status` |
+| `create` | `--label` |
+
+For example, `--priority high,critical` and `--priority high --priority critical` are equivalent.
+You can also mix forms: `--parent 1,BMO-2 --parent 3`.
+Space-separated values after a single flag are not supported: use `--parent 35,36,37` or
+`--parent 35 --parent 36 --parent 37`, not `--parent 35 36 37`.
+
+- Status, priority, and kind filters match **any** listed value (OR).
+- Parent filters match descendants at any depth of **any** listed parent (OR), without duplicates.
+  Parent issues themselves are not included just because they were listed; they can still match
+  as descendants of another listed parent. `plan` additionally includes open outside blockers.
+- Label filters require **all** listed labels (AND). On `create`, all listed labels are applied.
+- Different filter categories combine with **AND**. For example,
+  `bmo ls --parent 1,2,3 -k epic,bug` matches descendants of any listed parent whose kind is
+  epic or bug. `list --all` is the exception: it bypasses every filter.
+- `list` still excludes done issues unless `--include-done` or an explicit matching status is
+  supplied. The board includes done issues.
+
+Commas always separate values in these options, even when shell-quoted: `--label "red,blue"`
+means two labels, not one label containing a comma. To reference a literal comma-containing
+label, the single-label `label add`, `label rm`, and `label delete` commands do not split names.
+`create --file` remains repeat-only; commas in file paths are preserved. Scalar fields such as
+`create --parent`, `edit --parent`, and assignee options remain single-valued.
+
 ## bmo init
 
 Initialize a new bmo project in the current directory.
@@ -164,14 +199,14 @@ bmo stats --json
 
 Show all issues organized into a Kanban board by status column.
 
-**Synopsis:** `bmo board [--label <label>]... [--priority <priority>]... [--assignee <name>] [--parent <id>]`
+**Synopsis:** `bmo board [--label <label,...>]... [--priority <priority,...>]... [--assignee <name>] [--parent <id,...>]...`
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `-l, --label <label>` | string (repeatable) | (none) | Filter board to issues with this label |
-| `-p, --priority <priority>` | string (repeatable) | (none) | Filter board to this priority |
+| `-l, --label <label>` | string (comma-separated values; alternatively, repeat the flag for each value) | (none) | Match all listed labels |
+| `-p, --priority <priority>` | string (comma-separated values; alternatively, repeat the flag for each value) | (none) | Match any listed priority |
 | `-a, --assignee <name>` | string | (none) | Filter board to this assignee |
-| `--parent <id>` | issue ID | (none) | Filter board to descendants of this issue, at any depth (`BMO-N` or `N`) |
+| `--parent <id>` | issue ID (comma-separated values; alternatively, repeat the flag for each value) | (none) | Match descendants of any listed parent, at any depth (`BMO-N` or `N`) |
 
 **Examples:**
 
@@ -179,7 +214,9 @@ Show all issues organized into a Kanban board by status column.
 bmo board
 bmo board --assignee alice --json
 bmo board --priority high --priority critical
+bmo board --priority high,critical --label backend,urgent
 bmo board --parent BMO-1
+bmo board --parent BMO-1,2
 ```
 
 **JSON output** (`data` field):
@@ -198,12 +235,12 @@ bmo board --parent BMO-1
 
 Show issues that are ready to work on — issues that have no unresolved blocking dependencies.
 
-**Synopsis:** `bmo next [--assignee <name>] [--parent <id>] [--limit <n>]`
+**Synopsis:** `bmo next [--assignee <name>] [--parent <id,...>]... [--limit <n>]`
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `-a, --assignee <name>` | string | (none) | Restrict results to this assignee |
-| `--parent <id>` | issue ID | (none) | Restrict results to descendants of this issue, at any depth (`BMO-N` or `N`) |
+| `--parent <id>` | issue ID (comma-separated values; alternatively, repeat the flag for each value) | (none) | Restrict results to descendants of any listed parent, at any depth (`BMO-N` or `N`) |
 | `--limit <n>` | integer | 10 | Maximum number of results |
 
 **Examples:**
@@ -212,10 +249,11 @@ Show issues that are ready to work on — issues that have no unresolved blockin
 bmo next
 bmo next --assignee alice --limit 5 --json
 bmo next --parent BMO-1 --json
+bmo next --parent BMO-1,2 --json
 ```
 
 With `--parent`, bmo still judges readiness against every open issue. If a descendant waits on an
-open issue outside the parent, the descendant is not ready. If a descendant has sub-issues of its
+open issue outside the listed parents, the descendant is not ready. If a descendant has sub-issues of its
 own, it is not a leaf, so its sub-issues are reported instead.
 
 **JSON output** (`data` field): array of issue objects.
@@ -225,11 +263,11 @@ own, it is not a leaf, so its sub-issues are reported instead.
 Show a phased execution plan derived from issue dependency relationships. Issues are grouped into
 phases where each phase contains issues that can be worked in parallel.
 
-**Synopsis:** `bmo plan [--parent <id>] [--assignee <name>] [--phase <n>] [--no-links]`
+**Synopsis:** `bmo plan [--parent <id,...>]... [--assignee <name>] [--phase <n>] [--no-links]`
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--parent <id>` | issue ID | (none) | Plan only the descendants of this issue (`BMO-N` or `N`), plus every open issue that blocks them |
+| `--parent <id>` | issue ID (comma-separated values; alternatively, repeat the flag for each value) | (none) | Plan descendants of any listed parent at any depth (`BMO-N` or `N`), plus every open issue that blocks them |
 | `-a, --assignee <name>` | string | (none) | Filter plan to this assignee |
 | `--phase <n>` | integer | (none) | Return only the issues in phase N as a flat array |
 | `--no-links` | flag | false | Ignore link relations; order phases by file conflicts only |
@@ -249,9 +287,10 @@ bmo plan --json
 bmo plan --phase 1 --json
 bmo plan --phase 2 --assignee alice --json
 bmo plan --parent BMO-1 --phase 1 --json
+bmo plan --parent BMO-1,2 --phase 1 --json
 ```
 
-With `--parent`, the plan covers the parent's descendants plus every open issue that blocks one of
+With `--parent`, the plan covers the listed parents' descendants plus every open issue that blocks one of
 them, directly or through a chain of blockers. Those outside blockers appear in earlier phases, so
 the plan never schedules a descendant before the work it waits on.
 
@@ -337,11 +376,11 @@ only so the envelope shape stays stable for existing consumers.
 
 Delete issues in bulk. Defaults to deleting all `done` issues if no filter is specified.
 
-**Synopsis:** `bmo truncate [--status <status>]... [--all] [--yes]`
+**Synopsis:** `bmo truncate [--status <status,...>]... [--all] [--yes]`
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `-s, --status <status>` | string (repeatable) | `done` | Delete issues with this status (repeatable for multiple) |
+| `-s, --status <status>` | string (comma-separated values; alternatively, repeat the flag for each value) | `done` | Delete issues matching any listed status |
 | `--all` | bool | false | Delete ALL issues regardless of status (mutually exclusive with `--status`) |
 | `--yes` | bool | false | Skip the confirmation prompt |
 
@@ -353,6 +392,7 @@ Prompts for confirmation before deleting unless `--yes` is passed. Reports the c
 bmo truncate
 bmo truncate --yes
 bmo truncate --status backlog --status todo
+bmo truncate --status backlog,todo
 bmo truncate --all --yes
 ```
 
@@ -406,8 +446,8 @@ Create a new issue.
 | `-k, --kind <kind>` | string | `task` | Issue kind/type |
 | `-a, --assignee <name>` | string | (none) | Assignee |
 | `--parent <id>` | string | (none) | Parent issue ID |
-| `-l, --label <label>` | string (repeatable) | (none) | Label to apply (repeat for multiple) |
-| `-f, --file <path>` | string (repeatable) | (none) | File path to attach (repeat for multiple) |
+| `-l, --label <label>` | string (comma-separated values; alternatively, repeat the flag for each value) | (none) | Apply all listed labels; commas separate names |
+| `-f, --file <path>` | string (repeat the flag for each path) | (none) | File path to attach (commas are part of the path) |
 
 **Examples:**
 
@@ -415,6 +455,7 @@ Create a new issue.
 bmo create --title "Fix login bug" --kind bug --priority high
 bmo issue create --title "Fix login bug" --kind bug --priority high
 bmo create -t "Add tests" -k task --parent BMO-1 --label testing
+bmo create -t "Fix API" -k bug --label backend,urgent
 bmo create --title "Epic: v2 launch" --kind epic --json
 ```
 
@@ -430,12 +471,12 @@ Aliases: `bmo ls`, `bmo issue list`, `bmo issue ls`
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `-s, --status <status>` | string (repeatable) | (none) | Filter by status |
-| `-p, --priority <priority>` | string (repeatable) | (none) | Filter by priority |
-| `-k, --kind <kind>` | string (repeatable) | (none) | Filter by kind |
+| `-s, --status <status>` | string (comma-separated values; alternatively, repeat the flag for each value) | (none) | Match any listed status |
+| `-p, --priority <priority>` | string (comma-separated values; alternatively, repeat the flag for each value) | (none) | Match any listed priority |
+| `-k, --kind <kind>` | string (comma-separated values; alternatively, repeat the flag for each value) | (none) | Match any listed kind |
 | `--assignee <name>` | string | (none) | Filter by assignee |
-| `-l, --label <label>` | string (repeatable) | (none) | Filter by label (AND semantics) |
-| `--parent <id>` | issue ID | (none) | Filter to descendants of this issue, at any depth (`BMO-N` or `N`) |
+| `-l, --label <label>` | string (comma-separated values; alternatively, repeat the flag for each value) | (none) | Match all listed labels (AND semantics) |
+| `--parent <id>` | issue ID (comma-separated values; alternatively, repeat the flag for each value) | (none) | Match descendants of any listed parent, at any depth (`BMO-N` or `N`) |
 | `--search <text>` | string | (none) | Full-text search in title and description |
 | `--limit <n>` | integer | 50 | Maximum number of results |
 | `--sort <field>` | string | (none) | Sort field |
@@ -450,6 +491,8 @@ bmo list
 bmo issue list
 bmo list --status in-progress --assignee alice
 bmo list --kind bug --priority high --json
+bmo ls --parent 1,2,3 -k epic,bug
+bmo list --status todo,review --label backend,urgent
 bmo list --all --json
 bmo list --search "login" --limit 10
 bmo list --include-done --priority high

@@ -390,7 +390,7 @@ pub struct IssueFilter {
     pub labels: Option<Vec<String>>,
     /// Matches every issue below this one in the parent hierarchy: its
     /// children, their children, and so on.
-    pub descendant_of: Option<IssueId>,
+    pub descendant_of: Option<Vec<IssueId>>,
     pub search: Option<String>,
     pub limit: Option<usize>,
     pub offset: Option<usize>,
@@ -409,18 +409,21 @@ pub struct IssueFilter {
 /// status, so a done sub-epic still connects its open children to `ancestor`.
 /// `UNION` drops repeated rows, which ends the walk even if the stored data
 /// holds a parent cycle.
-fn descendant_of_predicate(ancestor: IssueId) -> Expr {
+fn descendant_of_predicates(ancestors: Vec<IssueId>) -> Expr {
+    let placeholders = vec!["?"; ancestors.len()].join(", ");
     Expr::cust_with_values(
-        r#""issues"."id" IN (
-            WITH RECURSIVE descendants(id) AS (
-                SELECT id FROM issues WHERE parent_id = ?
-                UNION
-                SELECT child.id FROM issues AS child
-                JOIN descendants ON child.parent_id = descendants.id
-            )
-            SELECT id FROM descendants
-        )"#,
-        [ancestor],
+        format!(
+            r#""issues"."id" IN (
+                WITH RECURSIVE descendants(id) AS (
+                    SELECT id FROM issues WHERE parent_id IN ({placeholders})
+                    UNION
+                    SELECT child.id FROM issues AS child
+                    JOIN descendants ON child.parent_id = descendants.id
+                )
+                SELECT id FROM descendants
+            )"#
+        ),
+        ancestors,
     )
 }
 
@@ -494,7 +497,7 @@ impl IssueFilter {
                 q.and_where(Expr::col(IssueIden::Assignee).eq(v.as_str()));
             });
             query.apply_if(self.descendant_of.take(), |q, v| {
-                q.and_where(descendant_of_predicate(v));
+                q.and_where(descendant_of_predicates(v));
             });
             query.apply_if(self.search.take(), |q, v| {
                 q.cond_where(
