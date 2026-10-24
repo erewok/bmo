@@ -25,9 +25,24 @@ pub struct IssueQuery {
     pub kind: Option<String>,
     pub priority: Option<String>,
     /// Restricts results to descendants of this issue id (`?parent=5`)
-    pub parent: Option<IssueId>,
+    pub parents: Option<String>,
     /// defaults to false; pass ?all=true to include done issues
     pub all: Option<bool>,
+}
+
+impl IssueQuery {
+    pub fn descendant_of(&self) -> anyhow::Result<Option<Vec<IssueId>>> {
+        if let Some(parents) = &self.parents {
+            let ids = parents
+                .split(',')
+                .map(|s| s.parse::<IssueId>())
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| anyhow::anyhow!("invalid parent: {e}"))?;
+            Ok(Some(ids))
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 /// Query parameters accepted by GET /api/board.
@@ -220,7 +235,7 @@ pub async fn api_issue_list(
             status: status_filter.clone(),
             kind: kind_filter.clone(),
             priority: priority_filter.clone(),
-            descendant_of: params.parent,
+            descendant_of: params.descendant_of()?,
             search: params.q.clone(),
             limit: Some(limit),
             offset: Some(offset),
@@ -233,7 +248,7 @@ pub async fn api_issue_list(
             status: status_filter,
             kind: kind_filter,
             priority: priority_filter,
-            descendant_of: params.parent,
+            descendant_of: params.descendant_of()?,
             search: params.q,
             limit: None,
             offset: None,

@@ -10,10 +10,12 @@ use crate::planner::plan::generate_plan;
 
 #[derive(Args)]
 pub struct PlanArgs {
-    /// Plan only the descendants of this issue (e.g. 5 or BMO-5), plus every
-    /// open issue that blocks one of them, even from outside the parent
-    #[arg(long)]
-    pub parent: Option<IssueId>,
+    /// Plan descendants of any listed parent, plus outside blockers (repeatable or comma-separated)
+    ///
+    /// Parent IDs accept forms like 5 or BMO-5 (repeatable or comma-separated).
+    /// Includes every open issue that blocks a descendant, even from outside the listed parents.
+    #[arg(long, value_delimiter = ',')]
+    pub parent: Option<Vec<IssueId>>,
 
     /// Filter by assignee (requires --phase)
     #[arg(short, long)]
@@ -54,8 +56,8 @@ pub fn run(args: &PlanArgs, json: bool, db: Option<String>) -> anyhow::Result<()
     // Build the graph from every open issue before scoping it to `--parent`,
     // so that the scoped graph still sees blockers outside the parent.
     let mut dag = Dag::build(&all_issues, &all_relations);
-    if let Some(parent) = args.parent {
-        dag = dag.scoped_to(&open_descendant_ids(&repo, parent)?);
+    if let Some(parents) = &args.parent {
+        dag = dag.scoped_to(&open_descendant_ids(&repo, parents.clone())?);
     }
 
     // NOTE: The --assignee flag is declared in PlanArgs but generate_plan() operates on a

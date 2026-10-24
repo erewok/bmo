@@ -170,6 +170,273 @@ fn create_and_list_issue() {
 }
 
 #[test]
+fn list_filters_accept_single_comma_separated_and_repeated_values() {
+    let dir = setup();
+    for (title, status, priority, kind, labels) in [
+        ("First", "todo", "high", "bug", vec!["red"]),
+        ("Second", "review", "low", "task", vec!["blue"]),
+        ("Third", "todo", "low", "bug", vec!["red", "blue"]),
+        ("Fourth", "done", "high", "chore", vec!["red", "blue"]),
+    ] {
+        let output = bmo(&dir)
+            .args([
+                "create",
+                "--title",
+                title,
+                "--status",
+                status,
+                "--priority",
+                priority,
+                "--kind",
+                kind,
+                "--json",
+            ])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let created: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        let id = created["data"]["id"].as_i64().unwrap().to_string();
+        for label in labels {
+            bmo(&dir)
+                .args(["label", "add", &id, label])
+                .assert()
+                .success();
+        }
+    }
+
+    let cases = [
+        (vec!["--status", "todo"], vec![1, 3]),
+        (vec!["--status", "todo,review"], vec![1, 2, 3]),
+        (
+            vec!["--status", "todo", "--status", "review"],
+            vec![1, 2, 3],
+        ),
+        (vec!["--status", "todo,done"], vec![1, 3, 4]),
+        (vec!["--priority", "high"], vec![1]),
+        (vec!["--priority", "high,low"], vec![1, 2, 3]),
+        (
+            vec!["--priority", "high", "--priority", "low"],
+            vec![1, 2, 3],
+        ),
+        (vec!["--kind", "bug"], vec![1, 3]),
+        (vec!["--kind", "bug,task"], vec![1, 2, 3]),
+        (vec!["--kind", "bug", "--kind", "task"], vec![1, 2, 3]),
+        (vec!["--label", "red"], vec![1, 3]),
+        (vec!["--label", "red,blue"], vec![3]),
+        (vec!["--label", "red", "--label", "blue"], vec![3]),
+        (vec!["--label", "red,blue", "--include-done"], vec![3, 4]),
+        (
+            vec![
+                "--status",
+                "todo,review",
+                "--priority",
+                "low",
+                "--kind",
+                "bug,task",
+            ],
+            vec![2, 3],
+        ),
+        (vec!["--status", "review", "--kind", "bug"], vec![]),
+    ];
+    for command in [vec!["list"], vec!["ls"], vec!["issue", "list"]] {
+        for (filters, expected) in &cases {
+            let output = bmo(&dir)
+                .args(&command)
+                .args(filters)
+                .arg("--json")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{command:?} {filters:?}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let envelope: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+            assert_eq!(envelope["ok"], true);
+            let mut ids: Vec<i64> = envelope["data"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|issue| issue["id"].as_i64().unwrap())
+                .collect();
+            ids.sort_unstable();
+            assert_eq!(&ids, expected, "{command:?} {filters:?}");
+        }
+    }
+}
+
+#[test]
+fn create_labels_and_board_filters_accept_single_lists_and_repeated_flags() {
+    let dir = setup();
+    for (title, priority, labels) in [
+        ("First", "high", vec!["--label", "red"]),
+        ("Second", "low", vec!["--label", "blue"]),
+        ("Third", "high", vec!["--label", "red,blue"]),
+        ("Fourth", "low", vec!["--label", "red", "--label", "blue"]),
+        (
+            "Fifth",
+            "medium",
+            vec!["--label", "red,blue", "--label", "green"],
+        ),
+    ] {
+        bmo(&dir)
+            .args(["create", "--title", title, "--priority", priority])
+            .args(labels)
+            .assert()
+            .success();
+    }
+    bmo(&dir).args(["close", "4"]).assert().success();
+
+    let output = bmo(&dir)
+        .args(["label", "list", "5", "--json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let labels: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let mut names: Vec<&str> = labels["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|label| label["name"].as_str().unwrap())
+        .collect();
+    names.sort_unstable();
+    assert_eq!(names, ["blue", "green", "red"]);
+
+    for (filters, expected) in [
+        (vec!["--priority", "high"], vec![1, 3]),
+        (vec!["--priority", "high,low"], vec![1, 2, 3, 4]),
+        (
+            vec!["--priority", "high", "--priority", "low"],
+            vec![1, 2, 3, 4],
+        ),
+        (
+            vec!["--priority", "high,low", "--priority", "medium"],
+            vec![1, 2, 3, 4, 5],
+        ),
+        (vec!["--label", "red"], vec![1, 3, 4, 5]),
+        (vec!["--label", "red,blue"], vec![3, 4, 5]),
+        (vec!["--label", "red", "--label", "blue"], vec![3, 4, 5]),
+        (vec!["--label", "red,blue", "--label", "green"], vec![5]),
+        (
+            vec!["--priority", "high,low", "--label", "red,blue"],
+            vec![3, 4],
+        ),
+    ] {
+        let output = bmo(&dir)
+            .arg("board")
+            .args(&filters)
+            .arg("--json")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{filters:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let board: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        let mut ids: Vec<i64> = ["backlog", "todo", "in_progress", "review", "done"]
+            .iter()
+            .flat_map(|column| board["data"][column].as_array().unwrap())
+            .map(|issue| issue["id"].as_i64().unwrap())
+            .collect();
+        ids.sort_unstable();
+        assert_eq!(ids, expected, "{filters:?}");
+    }
+}
+
+#[test]
+fn truncate_status_accepts_single_lists_and_repeated_flags() {
+    for (statuses, expected_deleted, expected_remaining) in [
+        (vec!["--status", "done"], 1, vec![2, 3, 4]),
+        (vec!["--status", "done,backlog"], 2, vec![3, 4]),
+        (
+            vec!["--status", "done", "--status", "backlog"],
+            2,
+            vec![3, 4],
+        ),
+        (
+            vec!["--status", "done,backlog", "--status", "review"],
+            3,
+            vec![4],
+        ),
+    ] {
+        let dir = setup();
+        for status in ["done", "backlog", "review", "todo"] {
+            bmo(&dir)
+                .args(["create", "--title", status, "--status", status])
+                .assert()
+                .success();
+        }
+        let output = bmo(&dir)
+            .arg("truncate")
+            .args(&statuses)
+            .args(["--yes", "--json"])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{statuses:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(result["data"]["deleted"], expected_deleted, "{statuses:?}");
+
+        let output = bmo(&dir)
+            .args(["list", "--all", "--sort", "id", "--json"])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let remaining: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        let mut ids: Vec<i64> = remaining["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|issue| issue["id"].as_i64().unwrap())
+            .collect();
+        ids.sort_unstable();
+        assert_eq!(ids, expected_remaining, "{statuses:?}");
+    }
+}
+
+#[test]
+fn multi_value_help_describes_supported_syntax() {
+    for command in ["list", "board", "next", "plan", "truncate", "create"] {
+        bmo_command()
+            .args([command, "--help"])
+            .assert()
+            .success()
+            .stdout(contains("repeatable or comma-separated"));
+    }
+}
+
+#[test]
+fn list_filters_reject_invalid_values_anywhere_in_a_list() {
+    let dir = setup();
+    for (flag, valid) in [
+        ("--status", "todo"),
+        ("--priority", "high"),
+        ("--kind", "bug"),
+    ] {
+        for value in [
+            "invalid".to_string(),
+            format!("{valid},invalid"),
+            format!("invalid,{valid}"),
+            format!("{valid},"),
+        ] {
+            bmo(&dir)
+                .args(["list", flag, &value])
+                .assert()
+                .failure()
+                .stderr(contains("unknown"));
+        }
+    }
+}
+
+#[test]
 fn create_issue_json_envelope() {
     let dir = setup();
     let output = bmo(&dir)

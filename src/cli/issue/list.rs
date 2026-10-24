@@ -10,24 +10,24 @@ pub struct ListArgs {
     /// Find everything: short-circuit all other filters and select all issues.
     #[arg(short = 'a', long = "all")]
     pub all: bool,
-    /// Filter by status (repeatable)
-    #[arg(short, long)]
+    /// Match any listed status (repeatable or comma-separated)
+    #[arg(short, long, value_delimiter = ',')]
     pub status: Vec<String>,
-    /// Filter by priority (repeatable)
-    #[arg(short, long)]
+    /// Match any listed priority (repeatable or comma-separated)
+    #[arg(short, long, value_delimiter = ',')]
     pub priority: Vec<String>,
-    /// Filter by kind (repeatable)
-    #[arg(short = 'k', long = "kind")]
+    /// Match any listed kind (repeatable or comma-separated)
+    #[arg(short = 'k', long = "kind", value_delimiter = ',')]
     pub kind: Vec<String>,
     /// Filter by assignee
     #[arg(long)]
     pub assignee: Option<String>,
-    /// Filter by label (AND semantics, repeatable)
-    #[arg(short, long)]
+    /// Match all listed labels (repeatable or comma-separated)
+    #[arg(short, long, value_delimiter = ',')]
     pub label: Vec<String>,
-    /// Filter to descendants of this issue: children, their children, and so on (e.g. 5 or BMO-5)
-    #[arg(long)]
-    pub parent: Option<IssueId>,
+    /// Show descendants at any depth of any listed parent (IDs like 5 or BMO-5; repeatable or comma-separated)
+    #[arg(long, value_delimiter = ',')]
+    pub parent: Option<Vec<IssueId>>,
     /// Search in title and description
     #[arg(long)]
     pub search: Option<String>,
@@ -86,7 +86,7 @@ pub fn run(args: &ListArgs, json: bool, db: Option<String>) -> anyhow::Result<()
         kinds: args.kind.clone(),
         assignee: args.assignee.clone(),
         labels: args.label.clone(),
-        descendant_of: args.parent,
+        descendant_of: args.parent.clone(),
         search: args.search.clone(),
         sort: args.sort.clone(),
         limit: args.limit,

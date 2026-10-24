@@ -10,7 +10,7 @@ pub struct FilterBuilder {
     pub kinds: Vec<String>,
     pub assignee: Option<String>,
     pub labels: Vec<String>,
-    pub descendant_of: Option<IssueId>,
+    pub descendant_of: Option<Vec<IssueId>>,
     pub search: Option<String>,
     pub sort: Option<String>,
     pub limit: usize,

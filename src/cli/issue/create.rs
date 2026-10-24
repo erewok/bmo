@@ -28,10 +28,10 @@ pub struct CreateArgs {
     /// Parent issue ID
     #[arg(long)]
     pub parent: Option<IssueId>,
-    /// Labels (repeatable)
-    #[arg(short, long)]
+    /// Add all listed labels (repeatable or comma-separated; commas separate names)
+    #[arg(short, long, value_delimiter = ',')]
     pub label: Vec<String>,
-    /// File attachments (repeatable)
+    /// File attachments (repeatable; commas are part of the path)
     #[arg(short, long)]
     pub file: Vec<String>,
 }

@@ -121,10 +121,10 @@ pub enum Commands {
 /// Ids of the open issues below `ancestor` in the parent hierarchy, at any depth.
 pub fn open_descendant_ids(
     repo: &impl Repository,
-    ancestor: IssueId,
+    ancestors: Vec<IssueId>,
 ) -> anyhow::Result<HashSet<IssueId>> {
     let descendants = repo.list_issues(IssueFilter {
-        descendant_of: Some(ancestor),
+        descendant_of: Some(ancestors),
         ..Default::default()
     })?;
     Ok(descendants.iter().map(|issue| issue.id).collect())

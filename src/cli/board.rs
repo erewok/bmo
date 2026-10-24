@@ -7,18 +7,18 @@ use crate::output::{BoardColumns, OutputMode, make_printer};
 
 #[derive(Args)]
 pub struct BoardArgs {
-    /// Filter by label
-    #[arg(short, long)]
+    /// Match all listed labels (repeatable or comma-separated)
+    #[arg(short, long, value_delimiter = ',')]
     pub label: Vec<String>,
-    /// Filter by priority
-    #[arg(short, long)]
+    /// Match any listed priority (repeatable or comma-separated)
+    #[arg(short, long, value_delimiter = ',')]
     pub priority: Vec<String>,
     /// Filter by assignee
     #[arg(short, long)]
     pub assignee: Option<String>,
-    /// Only show descendants of this issue: children, their children, and so on (e.g. 5 or BMO-5)
-    #[arg(long)]
-    pub parent: Option<IssueId>,
+    /// Show descendants at any depth of any listed parent (IDs like 5 or BMO-5; repeatable or comma-separated)
+    #[arg(long, value_delimiter = ',')]
+    pub parent: Option<Vec<IssueId>>,
 }
 
 pub fn run(args: &BoardArgs, json: bool, db: Option<String>) -> anyhow::Result<()> {
@@ -34,7 +34,7 @@ pub fn run(args: &BoardArgs, json: bool, db: Option<String>) -> anyhow::Result<(
         priorities: args.priority.clone(),
         labels: args.label.clone(),
         assignee: args.assignee.clone(),
-        descendant_of: args.parent,
+        descendant_of: args.parent.clone(),
         // The board has a done column, so keep done issues. `findall` would
         // also keep them, but it skips every other filter as well.
         include_done: true,

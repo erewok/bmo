@@ -13,9 +13,9 @@ pub struct NextArgs {
     #[arg(short, long)]
     pub assignee: Option<String>,
 
-    /// Only show descendants of this issue: children, their children, and so on (e.g. 5 or BMO-5)
-    #[arg(long)]
-    pub parent: Option<IssueId>,
+    /// Show descendants at any depth of any listed parent (IDs like 5 or BMO-5; repeatable or comma-separated)
+    #[arg(long, value_delimiter = ',')]
+    pub parent: Option<Vec<IssueId>>,
 
     /// Maximum number of results
     #[arg(long, default_value = "10")]
@@ -41,7 +41,8 @@ pub fn run(args: &NextArgs, json: bool, db: Option<String>) -> anyhow::Result<()
     topological_levels(&dag)?;
     let scope = args
         .parent
-        .map(|parent| open_descendant_ids(&repo, parent))
+        .as_ref()
+        .map(|parents| open_descendant_ids(&repo, parents.clone()))
         .transpose()?;
     let ready: Vec<_> = find_ready(&dag)
         .into_iter()
