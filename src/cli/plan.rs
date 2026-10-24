@@ -10,9 +10,9 @@ use crate::planner::plan::generate_plan;
 
 #[derive(Args)]
 pub struct PlanArgs {
-    /// Plan descendants of any listed parent, plus outside blockers (repeatable or comma-separated)
+    /// Plan descendants of any listed parent, plus outside blockers (comma-separated values; alternatively, repeat the flag for each value)
     ///
-    /// Parent IDs accept forms like 5 or BMO-5 (repeatable or comma-separated).
+    /// Parent IDs accept forms like 5 or BMO-5.
     /// Includes every open issue that blocks a descendant, even from outside the listed parents.
     #[arg(long, value_delimiter = ',')]
     pub parent: Option<Vec<IssueId>>,

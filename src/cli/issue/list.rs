@@ -10,22 +10,22 @@ pub struct ListArgs {
     /// Find everything: short-circuit all other filters and select all issues.
     #[arg(short = 'a', long = "all")]
     pub all: bool,
-    /// Match any listed status (repeatable or comma-separated)
+    /// Match any listed status (comma-separated values; alternatively, repeat the flag for each value)
     #[arg(short, long, value_delimiter = ',')]
     pub status: Vec<String>,
-    /// Match any listed priority (repeatable or comma-separated)
+    /// Match any listed priority (comma-separated values; alternatively, repeat the flag for each value)
     #[arg(short, long, value_delimiter = ',')]
     pub priority: Vec<String>,
-    /// Match any listed kind (repeatable or comma-separated)
+    /// Match any listed kind (comma-separated values; alternatively, repeat the flag for each value)
     #[arg(short = 'k', long = "kind", value_delimiter = ',')]
     pub kind: Vec<String>,
     /// Filter by assignee
     #[arg(long)]
     pub assignee: Option<String>,
-    /// Match all listed labels (repeatable or comma-separated)
+    /// Match all listed labels (comma-separated values; alternatively, repeat the flag for each value)
     #[arg(short, long, value_delimiter = ',')]
     pub label: Vec<String>,
-    /// Show descendants at any depth of any listed parent (IDs like 5 or BMO-5; repeatable or comma-separated)
+    /// Show descendants at any depth of any listed parent (IDs like 5 or BMO-5; comma-separated values; alternatively, repeat the flag for each value)
     #[arg(long, value_delimiter = ',')]
     pub parent: Option<Vec<IssueId>>,
     /// Search in title and description

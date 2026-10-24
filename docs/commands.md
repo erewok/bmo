@@ -58,8 +58,8 @@ These flags are accepted by every command.
 
 ## Multi-value Options and Filter Semantics
 
-The following options accept a single value, comma-separated values, repeated flags, or a
-mixture of both list forms:
+The following options accept a single value or comma-separated values; alternatively, repeat
+the flag for each value. You can also mix comma-separated values and repeated flags:
 
 | Command | Multi-value options |
 |---------|---------------------|
@@ -71,6 +71,8 @@ mixture of both list forms:
 
 For example, `--priority high,critical` and `--priority high --priority critical` are equivalent.
 You can also mix forms: `--parent 1,BMO-2 --parent 3`.
+Space-separated values after a single flag are not supported: use `--parent 35,36,37` or
+`--parent 35 --parent 36 --parent 37`, not `--parent 35 36 37`.
 
 - Status, priority, and kind filters match **any** listed value (OR).
 - Parent filters match descendants at any depth of **any** listed parent (OR), without duplicates.
@@ -201,10 +203,10 @@ Show all issues organized into a Kanban board by status column.
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `-l, --label <label>` | string (repeatable or comma-separated) | (none) | Match all listed labels |
-| `-p, --priority <priority>` | string (repeatable or comma-separated) | (none) | Match any listed priority |
+| `-l, --label <label>` | string (comma-separated values; alternatively, repeat the flag for each value) | (none) | Match all listed labels |
+| `-p, --priority <priority>` | string (comma-separated values; alternatively, repeat the flag for each value) | (none) | Match any listed priority |
 | `-a, --assignee <name>` | string | (none) | Filter board to this assignee |
-| `--parent <id>` | issue ID (repeatable or comma-separated) | (none) | Match descendants of any listed parent, at any depth (`BMO-N` or `N`) |
+| `--parent <id>` | issue ID (comma-separated values; alternatively, repeat the flag for each value) | (none) | Match descendants of any listed parent, at any depth (`BMO-N` or `N`) |
 
 **Examples:**
 
@@ -238,7 +240,7 @@ Show issues that are ready to work on — issues that have no unresolved blockin
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `-a, --assignee <name>` | string | (none) | Restrict results to this assignee |
-| `--parent <id>` | issue ID (repeatable or comma-separated) | (none) | Restrict results to descendants of any listed parent, at any depth (`BMO-N` or `N`) |
+| `--parent <id>` | issue ID (comma-separated values; alternatively, repeat the flag for each value) | (none) | Restrict results to descendants of any listed parent, at any depth (`BMO-N` or `N`) |
 | `--limit <n>` | integer | 10 | Maximum number of results |
 
 **Examples:**
@@ -265,7 +267,7 @@ phases where each phase contains issues that can be worked in parallel.
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--parent <id>` | issue ID (repeatable or comma-separated) | (none) | Plan descendants of any listed parent at any depth (`BMO-N` or `N`), plus every open issue that blocks them |
+| `--parent <id>` | issue ID (comma-separated values; alternatively, repeat the flag for each value) | (none) | Plan descendants of any listed parent at any depth (`BMO-N` or `N`), plus every open issue that blocks them |
 | `-a, --assignee <name>` | string | (none) | Filter plan to this assignee |
 | `--phase <n>` | integer | (none) | Return only the issues in phase N as a flat array |
 | `--no-links` | flag | false | Ignore link relations; order phases by file conflicts only |
@@ -378,7 +380,7 @@ Delete issues in bulk. Defaults to deleting all `done` issues if no filter is sp
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `-s, --status <status>` | string (repeatable or comma-separated) | `done` | Delete issues matching any listed status |
+| `-s, --status <status>` | string (comma-separated values; alternatively, repeat the flag for each value) | `done` | Delete issues matching any listed status |
 | `--all` | bool | false | Delete ALL issues regardless of status (mutually exclusive with `--status`) |
 | `--yes` | bool | false | Skip the confirmation prompt |
 
@@ -444,8 +446,8 @@ Create a new issue.
 | `-k, --kind <kind>` | string | `task` | Issue kind/type |
 | `-a, --assignee <name>` | string | (none) | Assignee |
 | `--parent <id>` | string | (none) | Parent issue ID |
-| `-l, --label <label>` | string (repeatable or comma-separated) | (none) | Apply all listed labels; commas separate names |
-| `-f, --file <path>` | string (repeatable) | (none) | File path to attach (repeat for multiple; commas are part of the path) |
+| `-l, --label <label>` | string (comma-separated values; alternatively, repeat the flag for each value) | (none) | Apply all listed labels; commas separate names |
+| `-f, --file <path>` | string (repeat the flag for each path) | (none) | File path to attach (commas are part of the path) |
 
 **Examples:**
 
@@ -469,12 +471,12 @@ Aliases: `bmo ls`, `bmo issue list`, `bmo issue ls`
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `-s, --status <status>` | string (repeatable or comma-separated) | (none) | Match any listed status |
-| `-p, --priority <priority>` | string (repeatable or comma-separated) | (none) | Match any listed priority |
-| `-k, --kind <kind>` | string (repeatable or comma-separated) | (none) | Match any listed kind |
+| `-s, --status <status>` | string (comma-separated values; alternatively, repeat the flag for each value) | (none) | Match any listed status |
+| `-p, --priority <priority>` | string (comma-separated values; alternatively, repeat the flag for each value) | (none) | Match any listed priority |
+| `-k, --kind <kind>` | string (comma-separated values; alternatively, repeat the flag for each value) | (none) | Match any listed kind |
 | `--assignee <name>` | string | (none) | Filter by assignee |
-| `-l, --label <label>` | string (repeatable or comma-separated) | (none) | Match all listed labels (AND semantics) |
-| `--parent <id>` | issue ID (repeatable or comma-separated) | (none) | Match descendants of any listed parent, at any depth (`BMO-N` or `N`) |
+| `-l, --label <label>` | string (comma-separated values; alternatively, repeat the flag for each value) | (none) | Match all listed labels (AND semantics) |
+| `--parent <id>` | issue ID (comma-separated values; alternatively, repeat the flag for each value) | (none) | Match descendants of any listed parent, at any depth (`BMO-N` or `N`) |
 | `--search <text>` | string | (none) | Full-text search in title and description |
 | `--limit <n>` | integer | 50 | Maximum number of results |
 | `--sort <field>` | string | (none) | Sort field |

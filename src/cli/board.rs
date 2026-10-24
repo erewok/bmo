@@ -7,16 +7,16 @@ use crate::output::{BoardColumns, OutputMode, make_printer};
 
 #[derive(Args)]
 pub struct BoardArgs {
-    /// Match all listed labels (repeatable or comma-separated)
+    /// Match all listed labels (comma-separated values; alternatively, repeat the flag for each value)
     #[arg(short, long, value_delimiter = ',')]
     pub label: Vec<String>,
-    /// Match any listed priority (repeatable or comma-separated)
+    /// Match any listed priority (comma-separated values; alternatively, repeat the flag for each value)
     #[arg(short, long, value_delimiter = ',')]
     pub priority: Vec<String>,
     /// Filter by assignee
     #[arg(short, long)]
     pub assignee: Option<String>,
-    /// Show descendants at any depth of any listed parent (IDs like 5 or BMO-5; repeatable or comma-separated)
+    /// Show descendants at any depth of any listed parent (IDs like 5 or BMO-5; comma-separated values; alternatively, repeat the flag for each value)
     #[arg(long, value_delimiter = ',')]
     pub parent: Option<Vec<IssueId>>,
 }

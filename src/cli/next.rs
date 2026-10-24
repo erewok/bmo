@@ -13,7 +13,7 @@ pub struct NextArgs {
     #[arg(short, long)]
     pub assignee: Option<String>,
 
-    /// Show descendants at any depth of any listed parent (IDs like 5 or BMO-5; repeatable or comma-separated)
+    /// Show descendants at any depth of any listed parent (IDs like 5 or BMO-5; comma-separated values; alternatively, repeat the flag for each value)
     #[arg(long, value_delimiter = ',')]
     pub parent: Option<Vec<IssueId>>,
 

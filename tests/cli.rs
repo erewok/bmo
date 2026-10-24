@@ -409,7 +409,9 @@ fn multi_value_help_describes_supported_syntax() {
             .args([command, "--help"])
             .assert()
             .success()
-            .stdout(contains("repeatable or comma-separated"));
+            .stdout(contains(
+                "comma-separated values; alternatively, repeat the flag for each value",
+            ));
     }
 }
 

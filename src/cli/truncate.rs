@@ -8,7 +8,7 @@ use crate::model::{IssueFilter, Status};
 
 #[derive(Args)]
 pub struct TruncateArgs {
-    /// Delete issues matching any listed status (repeatable or comma-separated; default: done)
+    /// Delete issues matching any listed status (comma-separated values; alternatively, repeat the flag for each value; default: done)
     #[arg(short, long, value_name = "STATUS", value_delimiter = ',')]
     pub status: Vec<String>,
 

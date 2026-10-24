@@ -44,7 +44,7 @@ bmo board
 bmo web
 ```
 
-Combine filters with comma-separated values or repeated flags:
+Combine filters with comma-separated values; alternatively, repeat the flag for each value:
 
 ```bash
 bmo ls --parent 1,2,3 -k epic,bug
@@ -86,4 +86,3 @@ See [docs/pi-extension.md](docs/pi-extension.md) for the full integration guide.
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE) file.
-

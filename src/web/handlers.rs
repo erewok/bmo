@@ -25,14 +25,14 @@ pub struct IssueQuery {
     pub kind: Option<String>,
     pub priority: Option<String>,
     /// Restricts results to descendants of this issue id (`?parent=5`)
-    pub parents: Option<String>,
+    pub parent: Option<String>,
     /// defaults to false; pass ?all=true to include done issues
     pub all: Option<bool>,
 }
 
 impl IssueQuery {
     pub fn descendant_of(&self) -> anyhow::Result<Option<Vec<IssueId>>> {
-        if let Some(parents) = &self.parents {
+        if let Some(parents) = &self.parent {
             let ids = parents
                 .split(',')
                 .map(|s| s.parse::<IssueId>())
